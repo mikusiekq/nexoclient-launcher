@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Build output (recreated by `npm run build` / `npm run dev`)
+dist/
+dist-electron/
+release/
+
+# Logs & OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import {
   Layers, Plus, Check, Cpu, X,
-  Tag, Sliders, Box, Gamepad2,
-  Shield, Flame, Palette, ChevronRight, ChevronLeft, Play
+  Tag, Sliders, Box, ChevronRight, ChevronLeft, Play
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -16,42 +15,6 @@ const MC_BLOCKS = [
   'nether_bricks','deepslate_tiles','ancient_debris_top','amethyst_block',
 ] as const;
 
-
-
-const getProfileIcon = (name: string, engine: string, size = 18) => {
-  const n = name.toLowerCase();
-  if (engine === 'fabric' || engine === 'quilt') {
-    return <Cpu size={size} className="prof-icon-zap" />;
-  }
-  if (engine === 'forge' || engine === 'neoforge') {
-    return <Flame size={size} className="prof-icon-swords" />;
-  }
-  if (n.includes('survival') || n.includes('surv') || n.includes('hardcore')) {
-    return <Shield size={size} className="prof-icon-compass" />;
-  }
-  if (n.includes('creative') || n.includes('build')) {
-    return <Palette size={size} className="prof-icon-sparkles" />;
-  }
-  return <Gamepad2 size={size} className="prof-icon-default" />;
-};
-
-
-const getProfileTheme = (name: string, engine: string) => {
-  const n = name.toLowerCase();
-  if (engine === 'fabric' || engine === 'quilt') {
-    return 'theme-zap';
-  }
-  if (engine === 'forge' || engine === 'neoforge') {
-    return 'theme-swords';
-  }
-  if (n.includes('survival') || n.includes('surv') || n.includes('hardcore')) {
-    return 'theme-compass';
-  }
-  if (n.includes('creative') || n.includes('build')) {
-    return 'theme-sparkles';
-  }
-  return 'theme-default';
-};
 
 
 interface ProfilesViewProps {
@@ -204,19 +167,18 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
         ) : (
           <div className="profiles-list">
             {profiles.map(profile => {
-              const theme = getProfileTheme(profile.name, profile.engine);
               return (
-                <div key={profile.id} className={`profile-card glass-panel ${theme}`} onClick={() => onOpenProfile(profile.id, 'mods')} style={{ cursor: 'pointer' }}>
+                <div key={profile.id} className="profile-card glass-panel theme-zap" onClick={() => onOpenProfile(profile.id, 'mods')} style={{ cursor: 'pointer' }}>
                   <div className="profile-card-icon">
-                    {(profile as any).icon ? (
+                    {profile.icon ? (
                       <img
-                        src={`${MC_BASE}${(profile as any).icon}.png`}
-                        alt={(profile as any).icon}
+                        src={`${MC_BASE}${profile.icon}.png`}
+                        alt={profile.icon}
                         className="profile-block-icon"
                         style={{ imageRendering: 'pixelated' }}
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
-                    ) : getProfileIcon(profile.name, profile.engine, 36)}
+                    ) : <Cpu size={36} className="prof-icon-zap" />}
                   </div>
 
                   <div className="profile-card-info">
@@ -539,26 +501,6 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
           --theme-color-rgb: 255, 255, 255;
           --theme-glow-color: rgba(255, 255, 255, 0.05);
         }
-        .profile-card.theme-compass {
-          --theme-color: #34d399;
-          --theme-color-rgb: 52, 211, 153;
-          --theme-glow-color: rgba(52, 211, 153, 0.05);
-        }
-        .profile-card.theme-swords {
-          --theme-color: #f87171;
-          --theme-color-rgb: 248, 113, 113;
-          --theme-glow-color: rgba(248, 113, 113, 0.05);
-        }
-        .profile-card.theme-sparkles {
-          --theme-color: #38bdf8;
-          --theme-color-rgb: 56, 189, 248;
-          --theme-glow-color: rgba(56, 189, 248, 0.05);
-        }
-        .profile-card.theme-default {
-          --theme-color: #c084fc;
-          --theme-color-rgb: 192, 132, 252;
-          --theme-glow-color: rgba(192, 132, 252, 0.05);
-        }
 
         .profile-card {
           display: flex;
@@ -606,10 +548,6 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
         }
 
         .prof-icon-zap { color: #ffffff; }
-        .prof-icon-compass { color: #34d399; }
-        .prof-icon-swords { color: #f87171; }
-        .prof-icon-sparkles { color: #38bdf8; }
-        .prof-icon-default { color: #c084fc; }
 
         .profile-card-info {
           display: flex;
@@ -1502,7 +1440,6 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
 
         .wiz-ver-check { color: #4ade80; flex-shrink: 0; }
 
-        /* Engine tiles */
         .wiz-form-group {
           display: flex;
           flex-direction: column;
@@ -1517,69 +1454,13 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
           letter-spacing: 0.05em;
         }
 
-        .wiz-engine-grid {
-          display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 10px;
-        }
 
-        .wiz-engine-tile {
-          position: relative;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 24px 8px 16px;
-          border-radius: 14px;
-          border: 1px solid rgba(255,255,255,0.06);
-          background: rgba(255,255,255,0.01);
-          cursor: pointer;
-          transition: transform 0.25s cubic-bezier(0.16,1,0.3,1), border-color 0.25s, background 0.25s, box-shadow 0.25s;
-          text-align: center;
-          overflow: hidden;
-        }
 
-        .wiz-engine-tile:hover {
-          border-color: rgba(var(--eng-rgb), 0.3);
-          background: rgba(var(--eng-rgb), 0.04);
-          transform: translateY(-2px);
-        }
 
-        .wiz-engine-tile.selected {
-          border-color: rgba(var(--eng-rgb), 0.6);
-          background: rgba(var(--eng-rgb), 0.1);
-          box-shadow: 0 0 20px rgba(var(--eng-rgb), 0.15);
-          transform: translateY(-3px);
-        }
 
-        .wiz-eng-emoji { font-size: 1.5rem; line-height: 1; }
 
-        .wiz-eng-name {
-          position: relative;
-          z-index: 1;
-          font-family: 'Outfit', sans-serif;
-          font-size: 0.8rem;
-          font-weight: 800;
-          color: var(--eng-color);
-          text-shadow: 0 1px 4px rgba(0,0,0,0.6);
-        }
 
-        .wiz-eng-desc {
-          position: relative;
-          z-index: 1;
-          font-size: 0.6rem;
-          color: var(--text-muted);
-          line-height: 1.4;
-        }
 
-        .wiz-eng-check {
-          position: absolute;
-          top: 8px;
-          right: 8px;
-          color: var(--eng-color);
-          filter: drop-shadow(0 0 4px rgba(var(--eng-rgb), 0.5));
-          z-index: 2;
-        }
 
         /* Wizard footer/buttons */
         .wizard-footer {
@@ -1647,35 +1528,8 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
 
         .wizard-next-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-        /* Engine logo image */
-        .wiz-eng-logo {
-          width: 38px;
-          height: 38px;
-          border-radius: 10px;
-          object-fit: cover;
-          border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(0,0,0,0.3);
-          flex-shrink: 0;
-        }
 
-        /* Engine tile background image */
-        .wiz-eng-bg {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          object-position: center;
-          opacity: 0.08;
-          transition: opacity 0.25s;
-          pointer-events: none;
-          z-index: 0;
-        }
 
-        .wiz-engine-tile:hover .wiz-eng-bg,
-        .wiz-engine-tile.selected .wiz-eng-bg {
-          opacity: 0.15;
-        }
 
         /* Name + icon row */
         .wiz-name-row {

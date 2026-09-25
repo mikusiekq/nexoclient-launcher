@@ -9,9 +9,7 @@ import { useLanguage } from '../context/LanguageContext';
 interface HomeViewProps {
   config: LauncherConfig | null;
   versions: string[];
-  latestLoader: string;
   loadingVersions: boolean;
-  selectedVersion: string;
   activeProfile: Profile | null;
   isLaunching: boolean;
   isGameRunning: boolean;
@@ -241,9 +239,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button className="profile-card-btn" onClick={toggleProfileDropdown}>
                 {activeProfile ? (
                   <>
-                    {(activeProfile as any).icon ? (
+                    {activeProfile.icon ? (
                       <img
-                        src={`https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/${(activeProfile as any).icon}.png`}
+                        src={`https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/${activeProfile.icon}.png`}
                         alt=""
                         className="profile-card-icon"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -278,9 +276,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
                           onClick={() => handleSelectProfile(p.id)}
                         >
                           <div className="popup-profile-icon">
-                            {(p as any).icon ? (
+                            {p.icon ? (
                               <img
-                                src={`https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/${(p as any).icon}.png`}
+                                src={`https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/${p.icon}.png`}
                                 alt=""
                                 style={{ width: '18px', height: '18px', imageRendering: 'pixelated', borderRadius: '3px' }}
                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}

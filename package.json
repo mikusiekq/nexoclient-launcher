@@ -4,12 +4,11 @@
   "description": "NEXOCLIENT - Premium Minecraft Launcher",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "node build-electron.js --watch",
-    "build": "vite build && node build-electron.js",
+    "dev": "node scripts/build-electron.js --watch",
+    "build": "vite build && node scripts/build-electron.js",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@types/discord-rpc": "^4.0.10",
     "discord-rpc": "^4.0.1",
     "lucide-react": "^0.359.0",
     "minecraft-launcher-core": "^3.18.2",
@@ -19,11 +18,11 @@
     "skinview3d": "^3.4.2"
   },
   "devDependencies": {
+    "@types/discord-rpc": "^4.0.11",
     "@types/node": "^20.11.19",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
-    "concurrently": "^8.2.2",
     "electron": "^29.1.0",
     "esbuild": "^0.20.1",
     "typescript": "^5.3.3",

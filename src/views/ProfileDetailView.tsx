@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Package, Trash2, Cpu, FolderOpen, Tag, Box,
-  Settings, Sliders, Flame, Shield, Palette, Gamepad2, Check, X, RefreshCw
+  Settings, Sliders, Check, X, RefreshCw
 } from 'lucide-react';
 
 interface ProfileDetailViewProps {
@@ -13,24 +13,6 @@ interface ProfileDetailViewProps {
   initialTab?: 'mods' | 'settings';
   onBack: () => void;
 }
-
-const getProfileIcon = (name: string, engine: string, size = 18) => {
-  const n = name.toLowerCase();
-  if (engine === 'fabric' || engine === 'quilt') return <Cpu size={size} className="prof-icon-zap" />;
-  if (engine === 'forge' || engine === 'neoforge') return <Flame size={size} className="prof-icon-swords" />;
-  if (n.includes('survival') || n.includes('surv') || n.includes('hardcore')) return <Shield size={size} className="prof-icon-compass" />;
-  if (n.includes('creative') || n.includes('build')) return <Palette size={size} className="prof-icon-sparkles" />;
-  return <Gamepad2 size={size} className="prof-icon-default" />;
-};
-
-const getTheme = (name: string, engine: string) => {
-  if (engine === 'fabric' || engine === 'quilt') return { color: '#ffffff', rgb: '255,255,255' };
-  if (engine === 'forge' || engine === 'neoforge') return { color: '#f87171', rgb: '248,113,113' };
-  const n = name.toLowerCase();
-  if (n.includes('survival') || n.includes('hardcore')) return { color: '#34d399', rgb: '52,211,153' };
-  if (n.includes('creative') || n.includes('build')) return { color: '#38bdf8', rgb: '56,189,248' };
-  return { color: '#c084fc', rgb: '192,132,252' };
-};
 
 export const ProfileDetailView: React.FC<ProfileDetailViewProps> = ({
   profileId, config, versions, loadingVersions, onSaveConfig, initialTab, onBack,
@@ -51,7 +33,7 @@ export const ProfileDetailView: React.FC<ProfileDetailViewProps> = ({
 
   const profiles = config?.profiles || [];
   const profile = profiles.find(p => p.id === profileId) || null;
-  const theme = profile ? getTheme(profile.name, profile.engine) : { color: '#ffffff', rgb: '255,255,255' };
+  const theme = { color: '#ffffff', rgb: '255,255,255' };
 
   // Init form from profile
   useEffect(() => {
@@ -145,15 +127,15 @@ export const ProfileDetailView: React.FC<ProfileDetailViewProps> = ({
         </button>
         <div className="pdv-hero">
           <div className="pdv-icon-wrap">
-            {(profile as any).icon ? (
+            {profile.icon ? (
               <img
-                src={`https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/${(profile as any).icon}.png`}
+                src={`https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/${profile.icon}.png`}
                 alt=""
                 className="pdv-block-icon"
                 style={{ imageRendering: 'pixelated', width: '48px', height: '48px', borderRadius: '6px' }}
                 onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
-            ) : getProfileIcon(profile.name, profile.engine, 40)}
+            ) : <Cpu size={40} className="prof-icon-zap" />}
           </div>
           <div className="pdv-hero-info">
             <h1 className="pdv-profile-name">{profile.name}</h1>
@@ -777,74 +759,13 @@ export const ProfileDetailView: React.FC<ProfileDetailViewProps> = ({
 
         .pdv-ver-check { color: #4ade80; flex-shrink: 0; }
 
-        .pdv-engine-grid {
-          display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          gap: 10px;
-        }
 
-        .pdv-engine-tile {
-          position: relative;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 76px;
-          border-radius: 12px;
-          border: 1px solid rgba(255,255,255,0.06);
-          background: rgba(255,255,255,0.01);
-          cursor: pointer;
-          transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
-          text-align: center;
-          overflow: hidden;
-        }
 
-        .pdv-engine-tile:hover {
-          border-color: rgba(var(--eng-rgb), 0.35);
-          background: rgba(var(--eng-rgb), 0.05);
-        }
 
-        .pdv-engine-tile.selected {
-          border-color: rgba(var(--eng-rgb), 0.6);
-          background: rgba(var(--eng-rgb), 0.09);
-          box-shadow: 0 0 14px rgba(var(--eng-rgb), 0.12);
-        }
 
-        .pdv-eng-bg {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          object-position: center;
-          opacity: 0.08;
-          transition: opacity 0.25s;
-          pointer-events: none;
-          z-index: 0;
-        }
 
-        .pdv-engine-tile:hover .pdv-eng-bg,
-        .pdv-engine-tile.selected .pdv-eng-bg {
-          opacity: 0.16;
-        }
 
-        .pdv-eng-name {
-          position: relative;
-          z-index: 1;
-          font-family: 'Outfit', sans-serif;
-          font-size: 0.8rem;
-          font-weight: 800;
-          color: var(--eng-color);
-          text-shadow: 0 1px 4px rgba(0,0,0,0.6);
-        }
 
-        .pdv-eng-check {
-          position: absolute;
-          top: 6px;
-          right: 6px;
-          color: var(--eng-color);
-          z-index: 2;
-        }
 
         .pdv-settings-footer {
           padding-top: 16px;
@@ -915,10 +836,6 @@ export const ProfileDetailView: React.FC<ProfileDetailViewProps> = ({
 
         /* Profile icon themes */
         .prof-icon-zap { color: #ffffff; filter: drop-shadow(0 0 8px rgba(255,255,255,0.6)); }
-        .prof-icon-swords { color: #f87171; filter: drop-shadow(0 0 8px rgba(248,113,113,0.6)); }
-        .prof-icon-compass { color: #34d399; filter: drop-shadow(0 0 8px rgba(52,211,153,0.6)); }
-        .prof-icon-sparkles { color: #38bdf8; filter: drop-shadow(0 0 8px rgba(56,189,248,0.6)); }
-        .prof-icon-default { color: #c084fc; filter: drop-shadow(0 0 8px rgba(192,132,252,0.6)); }
       `}</style>
     </div>
   );

@@ -24,7 +24,6 @@ export const App: React.FC = () => {
 
   // Version states
   const [versions, setVersions] = useState<string[]>([]);
-  const [latestLoader, setLatestLoader] = useState('0.16.10');
   const [loadingVersions, setLoadingVersions] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -45,7 +44,6 @@ export const App: React.FC = () => {
 
   // Derive active profile and selected version
   const activeProfile = config?.profiles?.find(p => p.id === config?.activeProfileId) || null;
-  const selectedVersion = activeProfile?.version || (versions.length > 0 ? versions[0] : '');
 
   const handleSetActiveTab = (tab: 'home' | 'accounts' | 'settings' | 'profiles' | 'mods') => {
     setConsoleOpen(false);
@@ -66,7 +64,6 @@ export const App: React.FC = () => {
         // Fetch Fabric versions
         const versionData = await window.electronAPI.fetchVersions();
         setVersions(versionData.versions);
-        setLatestLoader(versionData.latestLoader);
       } catch (e: any) {
         console.error(e);
         setFetchError('Nie udało się połączyć z API Fabric. Sprawdź połączenie z internetem.');
@@ -298,9 +295,7 @@ export const App: React.FC = () => {
               <HomeView
                 config={config}
                 versions={versions}
-                latestLoader={latestLoader}
                 loadingVersions={loadingVersions}
-                selectedVersion={selectedVersion}
                 activeProfile={activeProfile}
                 isLaunching={isLaunching}
                 isGameRunning={isGameRunning}

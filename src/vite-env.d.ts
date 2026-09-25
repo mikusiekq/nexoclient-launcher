@@ -13,7 +13,9 @@ interface Profile {
   name: string;
   version: string;
   accountUuid: string | null;
-  engine: 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt';
+  engine: 'fabric';
+  /** Minecraft block texture name used as the profile icon */
+  icon?: string;
   createdAt: number;
 }
 
@@ -26,7 +28,6 @@ interface LauncherConfig {
   fullscreen: boolean;
   closeOnLaunch: boolean;
   discordRpc: boolean;
-  selectedVersion: string;
   account: AccountInfo | null;
   savedAccounts: AccountInfo[];
   profiles: Profile[];
@@ -44,12 +45,12 @@ interface Window {
     browseJava(): Promise<string | null>;
     browseGamePath(): Promise<string | null>;
     openFolder(folderName: string, profileId?: string): Promise<void>;
-    fetchVersions(): Promise<{ versions: string[]; latestLoader: string }>;
+    fetchVersions(): Promise<{ versions: string[] }>;
     loginOffline(username: string): Promise<AccountInfo>;
     loginMicrosoft(): Promise<AccountInfo>;
-    launchGame(version: string): Promise<boolean>;
-    
-    // Mods Management APIs
+    launchGame(version: string): Promise<void>;
+
+    // Profile mods
     getInstalledMods(profileId: string): Promise<any[]>;
     installProfileMod(
       profileId: string,
@@ -61,7 +62,7 @@ interface Window {
       iconUrl?: string
     ): Promise<boolean>;
     uninstallProfileMod(profileId: string, projectId: string): Promise<boolean>;
-    
+
     minimizeWindow(): void;
     maximizeWindow(): void;
     closeWindow(): void;

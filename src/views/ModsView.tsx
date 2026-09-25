@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, Package, Cpu, Check, X, AlertCircle, HelpCircle, Flame, Shield, Palette, Gamepad2 } from 'lucide-react';
+import { Search, Download, Package, Cpu, Check, X, AlertCircle, HelpCircle } from 'lucide-react';
 
 interface ModsViewProps {
   config: LauncherConfig | null;
@@ -16,23 +16,6 @@ interface ModrinthMod {
   categories?: string[];
 }
 
-const getProfileIcon = (name: string, engine: string, size = 18) => {
-  const n = name.toLowerCase();
-  if (engine === 'fabric' || engine === 'quilt') {
-    return <Cpu size={size} className="prof-icon-zap" />;
-  }
-  if (engine === 'forge' || engine === 'neoforge') {
-    return <Flame size={size} className="prof-icon-swords" />;
-  }
-  if (n.includes('survival') || n.includes('surv') || n.includes('hardcore')) {
-    return <Shield size={size} className="prof-icon-compass" />;
-  }
-  if (n.includes('creative') || n.includes('build')) {
-    return <Palette size={size} className="prof-icon-sparkles" />;
-  }
-  return <Gamepad2 size={size} className="prof-icon-default" />;
-};
-
 const MC_BASE = 'https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/';
 
 export const ModsView: React.FC<ModsViewProps> = ({ config }) => {
@@ -47,7 +30,6 @@ export const ModsView: React.FC<ModsViewProps> = ({ config }) => {
   const [installingModId, setInstallingModId] = useState<string | null>(null);
 
   const profiles = config?.profiles || [];
-  const eligibleProfiles = profiles.filter(p => p.engine !== 'vanilla');
 
   // Load popular mods on mount
   useEffect(() => {
@@ -111,8 +93,8 @@ export const ModsView: React.FC<ModsViewProps> = ({ config }) => {
       }
 
       // 2. Fetch compatible version from Modrinth
-      const loader = profile.engine; // fabric, forge, quilt, neoforge
-      const version = profile.version; // e.g. 1.20.1
+      const loader = 'fabric';
+      const version = profile.version;
       
       const queryUrl = `https://api.modrinth.com/v2/project/${activeModForInstall.project_id}/version?loaders=%5B%22${loader}%22%5D&game_versions=%5B%22${version}%22%5D`;
       const res = await fetch(queryUrl);
@@ -122,7 +104,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ config }) => {
       if (!versionsData || versionsData.length === 0) {
         setInstallStatus({ 
           type: 'error', 
-          message: `Brak kompatybilnej wersji dla profilu ${profile.name} (wymaga silnika ${loader.toUpperCase()} na wersję ${version})` 
+          message: `Brak wersji tego moda dla Fabric ${version} (profil ${profile.name})` 
         });
         return;
       }
@@ -340,33 +322,32 @@ export const ModsView: React.FC<ModsViewProps> = ({ config }) => {
                     </button>
                   )}
                 </div>
-              ) : eligibleProfiles.length === 0 ? (
+              ) : profiles.length === 0 ? (
                 <div className="install-no-profiles">
                   <HelpCircle size={36} />
-                  <p>Brak kompatybilnych profili</p>
-                  <span>Mody wymagają silnika Fabric, Forge, NeoForge lub Quilt.<br />Utwórz taki profil w zakładce Profile.</span>
+                  <p>Brak profili</p>
+                  <span>Utwórz profil w zakładce Profile, aby instalować mody.</span>
                 </div>
               ) : (
                 <div className="install-profiles-list">
                   <p className="install-profiles-label">Wybierz profil do zainstalowania:</p>
-                  {eligibleProfiles.map(profile => {
-                    const engineClass = (profile.engine === 'fabric' || profile.engine === 'quilt') ? 'engine-fabric' : 'engine-forge';
+                  {profiles.map(profile => {
                     return (
                       <button
                         key={profile.id}
-                        className={`install-profile-row ${engineClass}`}
+                        className="install-profile-row"
                         onClick={() => installToProfile(profile)}
                       >
                         <div className="ipr-icon">
-                          {(profile as any).icon ? (
+                          {profile.icon ? (
                             <img
-                              src={`${MC_BASE}${(profile as any).icon}.png`}
+                              src={`${MC_BASE}${profile.icon}.png`}
                               alt=""
                               className="ipr-block-icon"
                               style={{ imageRendering: 'pixelated', width: '22px', height: '22px', borderRadius: '4px' }}
                               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                             />
-                          ) : getProfileIcon(profile.name, profile.engine, 18)}
+                          ) : <Cpu size={18} className="prof-icon-zap" />}
                         </div>
                         <div className="ipr-info">
                           <span className="ipr-name">{profile.name}</span>
@@ -977,8 +958,7 @@ export const ModsView: React.FC<ModsViewProps> = ({ config }) => {
           transition: opacity 0.2s;
         }
 
-        .install-profile-row.engine-fabric { --row-accent: #3b82f6; }
-        .install-profile-row.engine-forge  { --row-accent: #f97316; }
+        .install-profile-row { --row-accent: #3b82f6; }
 
         .install-profile-row:hover {
           border-color: rgba(255,255,255,0.15);

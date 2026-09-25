@@ -7,7 +7,6 @@
     "dev": "node scripts/build-electron.js --watch",
     "build": "vite build && node scripts/build-electron.js",
     "dist": "npm run build && electron-builder --win --publish never",
-    "release": "npm run build && electron-builder --win --publish always",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -38,6 +37,7 @@
   "build": {
     "appId": "top.nexoclient.launcher",
     "productName": "NEXOCLIENT",
+    "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "release"
     },
@@ -71,7 +71,7 @@
         "provider": "github",
         "owner": "mikusiekq",
         "repo": "nexoclient-launcher",
-        "releaseType": "draft"
+        "releaseType": "release"
       }
     ]
   }

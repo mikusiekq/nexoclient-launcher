@@ -6,6 +6,9 @@ interface AccountInfo {
   token: string;
   type: 'offline' | 'microsoft';
   avatar: string;
+  refreshToken?: string;
+  expiresAt?: number;
+  xuid?: string;
 }
 
 interface Profile {
@@ -34,6 +37,36 @@ interface LauncherConfig {
   activeProfileId: string | null;
   /** First-run setup (account + profile) has been completed or skipped */
   setupCompleted?: boolean;
+}
+
+type ImportSourceId = 'ogulniega' | 'dawn' | 'modrinth' | 'lunar';
+
+interface ImportableProfile {
+  key: string;
+  name: string;
+  version: string | null;
+  mods: number;
+  worlds: string[];
+  resourcePacks: number;
+  hasOptions: boolean;
+  hasServers: boolean;
+}
+
+interface ImportSource {
+  id: ImportSourceId;
+  name: string;
+  found: boolean;
+  profiles: ImportableProfile[];
+}
+
+interface ImportOptions {
+  name: string;
+  version: string;
+  mods: boolean;
+  worlds: boolean;
+  servers: boolean;
+  options: boolean;
+  resourcePacks: boolean;
 }
 
 type UpdateStatus =
@@ -67,6 +100,10 @@ interface Window {
       iconUrl?: string
     ): Promise<boolean>;
     uninstallProfileMod(profileId: string, projectId: string): Promise<boolean>;
+
+    // Import from other launchers
+    listImportSources(): Promise<ImportSource[]>;
+    importProfile(sourceId: ImportSourceId, key: string, options: ImportOptions): Promise<LauncherConfig>;
 
     // Launcher updates
     getAppVersion(): Promise<string>;

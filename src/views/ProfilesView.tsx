@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   Layers, Plus, Check, Cpu, X,
-  Tag, Sliders, Box, ChevronRight, ChevronLeft, Play
+  Tag, Sliders, Box, ChevronRight, ChevronLeft, Play, Download
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { ImportFromLauncher } from '../components/ImportFromLauncher';
 
 const MC_BASE = 'https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21/assets/minecraft/textures/block/';
 const MC_BLOCKS = [
@@ -45,6 +46,8 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
 
   // Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
+  // New profile: first choose between creating one and importing from another launcher
+  const [wizardMode, setWizardMode] = useState<'choose' | 'create' | 'import'>('choose');
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [blockPickerOpen, setBlockPickerOpen] = useState(false);
@@ -65,6 +68,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
     setFormName('Nowy profil');
     setFormVersion(versions[0] || '');
     setFormIcon('grass_block_top');
+    setWizardMode('choose');
     setWizardStep(1);
     setBlockPickerOpen(false);
     setWizardOpen(true);
@@ -239,6 +243,7 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
 
             {/* Wizard Header */}
             <div className="wizard-header">
+              {wizardMode !== 'create' ? <div /> : (
               <div className="wizard-steps-indicator">
                 {[1, 2].map(s => (
                   <div key={s} className={`wizard-step-dot ${wizardStep === s ? 'active' : wizardStep > s ? 'done' : ''}`}>
@@ -250,11 +255,48 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                   <span className={wizardStep === 2 ? 'wsl-active' : ''}>Profil</span>
                 </div>
               </div>
+              )}
               <button className="modal-close-btn" onClick={closeWizard} disabled={!!savingStatus}><X size={16} /></button>
             </div>
 
+            {/* Create a new profile or import one from another launcher */}
+            {wizardMode === 'choose' && (
+              <div className="wizard-body">
+                <div className="wizard-step-title">
+                  <h2>Nowy profil</h2>
+                  <p>Utwórz profil od zera albo przenieś go z innego launchera</p>
+                </div>
+                <div className="wiz-mode-grid">
+                  <button className="wiz-mode-card" onClick={() => setWizardMode('create')}>
+                    <div className="wiz-mode-icon"><Plus size={20} /></div>
+                    <span className="wiz-mode-title">Stwórz profil</span>
+                    <span className="wiz-mode-desc">Wybierz wersję Minecrafta i nazwę</span>
+                  </button>
+                  <button className="wiz-mode-card" onClick={() => setWizardMode('import')}>
+                    <div className="wiz-mode-icon"><Download size={20} /></div>
+                    <span className="wiz-mode-title">Importuj z clienta</span>
+                    <span className="wiz-mode-desc">Ogulniega, Dawn, Modrinth, Lunar — mody, światy, serwery i ustawienia</span>
+                  </button>
+                </div>
+                <div className="wizard-footer">
+                  <button className="wizard-cancel-btn" onClick={closeWizard}>Anuluj</button>
+                </div>
+              </div>
+            )}
+
+            {wizardMode === 'import' && (
+              <ImportFromLauncher
+                versions={versions}
+                onBack={() => setWizardMode('choose')}
+                onImported={async imported => {
+                  await onSaveConfig(imported);
+                  closeWizard();
+                }}
+              />
+            )}
+
             {/* Step 1 — Choose Minecraft Version */}
-            {wizardStep === 1 && (
+            {wizardMode === 'create' && wizardStep === 1 && (
               <div className="wizard-body">
                 <div className="wizard-step-title">
                   <h2>Wybierz wersję Minecraft</h2>
@@ -277,7 +319,10 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
                   </div>
                 )}
                 <div className="wizard-footer">
-                  <button className="wizard-cancel-btn" onClick={closeWizard}>Anuluj</button>
+                  <button className="wizard-back-btn" onClick={() => setWizardMode('choose')}>
+                    <ChevronLeft size={16} />
+                    <span>Wstecz</span>
+                  </button>
                   <button
                     className="wizard-next-btn"
                     disabled={!formVersion}
@@ -290,8 +335,8 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
               </div>
             )}
 
-            {/* Step 2 — Name + Engine */}
-            {wizardStep === 2 && (
+            {/* Step 2 — Name + icon */}
+            {wizardMode === 'create' && wizardStep === 2 && (
               <div className="wizard-body">
                 <div className="wizard-step-title">
                   <h2>{editingId ? 'Edytuj profil' : 'Nazwij i skonfiguruj'}</h2>
@@ -1486,6 +1531,42 @@ export const ProfilesView: React.FC<ProfilesViewProps> = ({
           transition: var(--transition-fast);
         }
         .wizard-cancel-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.05); }
+
+        /* Create / import choice */
+        .wiz-mode-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+        .wiz-mode-card {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 8px;
+          padding: 18px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid var(--border-color);
+          border-radius: 12px;
+          color: var(--text-main);
+          text-align: left;
+          cursor: pointer;
+          transition: var(--transition-fast);
+        }
+        .wiz-mode-card:hover {
+          background: rgba(255,255,255,0.07);
+          border-color: rgba(255,255,255,0.25);
+        }
+        .wiz-mode-icon {
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255,255,255,0.08);
+        }
+        .wiz-mode-title { font-size: 0.92rem; font-weight: 800; }
+        .wiz-mode-desc { font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; }
 
         .wizard-back-btn {
           display: flex;

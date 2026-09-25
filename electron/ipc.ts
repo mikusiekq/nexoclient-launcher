@@ -6,6 +6,7 @@ import { loginMicrosoft, loginOffline } from './auth';
 import { getConfig, saveConfig, type LauncherConfig } from './config';
 import { setDiscordRpcEnabled } from './discord';
 import { launchGame } from './game';
+import { importProfile, listImportSources, type ImportOptions, type ImportSourceId } from './importers';
 import { detectJavaPaths } from './java';
 import { getInstalledMods, installMod, uninstallMod } from './mods';
 import { getProfileDir, syncProfileFolderNames } from './profiles';
@@ -45,6 +46,12 @@ export function registerIpcHandlers() {
     }
   });
   ipcMain.handle('launch-game', (_event, version: string) => launchGame(version));
+
+  // Import from other launchers
+  ipcMain.handle('list-import-sources', () => listImportSources());
+  ipcMain.handle('import-profile', (_event, sourceId: ImportSourceId, key: string, options: ImportOptions) =>
+    importProfile(sourceId, key, options),
+  );
 
   // Profile mods
   ipcMain.handle('get-installed-mods', (_event, profileId: string) => getInstalledMods(profileId));

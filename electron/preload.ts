@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loginMicrosoft: () => ipcRenderer.invoke('login-microsoft'),
   launchGame: (version: string) => ipcRenderer.invoke('launch-game', version),
   
+  listImportSources: () => ipcRenderer.invoke('list-import-sources'),
+  importProfile: (sourceId: string, key: string, options: any) => ipcRenderer.invoke('import-profile', sourceId, key, options),
+
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
   installUpdate: () => ipcRenderer.send('install-update'),

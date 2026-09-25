@@ -8,6 +8,10 @@ export interface AccountInfo {
   token: string;
   type: 'offline' | 'microsoft';
   avatar: string;
+  // Microsoft only: the game token expires after ~23 h and is renewed with the refresh token before launching
+  refreshToken?: string;
+  expiresAt?: number; // ms timestamp
+  xuid?: string;
 }
 
 export interface Profile {

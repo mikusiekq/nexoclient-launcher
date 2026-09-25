@@ -2,7 +2,9 @@ import { app } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'minecraft-launcher-core';
+import { ensureFreshAccount } from './auth';
 import { getConfig } from './config';
+import { setGamePresence, setLauncherPresence, updatePresenceFromLog } from './discord';
 import { httpGet } from './net';
 import { prepareBuiltinMods } from './nexoclient';
 import { getProfileDir } from './profiles';
@@ -37,14 +39,17 @@ function createRedactor(token: string) {
 
 export async function launchGame(mcVersion: string) {
   const config = getConfig();
-  const account = config.account;
-  if (!account) throw new Error('Musisz się zalogować, aby zagrać!');
+  if (!config.account) throw new Error('Musisz się zalogować, aby zagrać!');
   if (gameProcess) throw new Error('Gra jest już uruchomiona!');
 
   const profile = config.profiles.find(p => p.id === config.activeProfileId);
   if (!profile) throw new Error('Wybierz profil, aby zagrać.');
 
   try {
+    // An expired Microsoft token makes servers reject the session (401 on the profile key pair)
+    setLaunchStatus('Sprawdzanie sesji konta...');
+    const account = await ensureFreshAccount(config.account);
+
     // Real on-disk path: when Windows redirects AppData (launcher started from a packaged app), Java reports
     // class locations under the redirected path, and Fabric would not recognise its own loader on a
     // classpath built from the original one ("trying to load ... from target class loader")
@@ -62,7 +67,10 @@ export async function launchGame(mcVersion: string) {
     const launcher = new Client();
 
     launcher.on('debug', e => sendToRenderer('launcher-log', `[DEBUG] ${redact(e)}`));
-    launcher.on('data', e => sendToRenderer('launcher-log', redact(e)));
+    launcher.on('data', e => {
+      sendToRenderer('launcher-log', redact(e));
+      updatePresenceFromLog(String(e));
+    });
     launcher.on('progress', e =>
       sendToRenderer('launch-progress', {
         type: e.type,
@@ -81,6 +89,7 @@ export async function launchGame(mcVersion: string) {
         uuid: account.uuid,
         name: account.username,
         user_properties: '{}',
+        meta: account.type === 'microsoft' ? { type: 'msa', xuid: account.xuid } : { type: 'legacy' },
       },
       // Version files, libraries and mods per profile; saves, settings, servers and resource packs shared
       root: instanceDir,
@@ -98,9 +107,11 @@ export async function launchGame(mcVersion: string) {
     if (!child) throw new Error('Nie udało się uruchomić procesu gry.');
     gameProcess = child;
     sendToRenderer('game-started');
+    setGamePresence(mcVersion);
     child.on('close', (code: number) => {
       gameProcess = null;
       sendToRenderer('game-closed', code);
+      setLauncherPresence();
     });
 
     if (config.closeOnLaunch) setTimeout(() => app.quit(), 2000);

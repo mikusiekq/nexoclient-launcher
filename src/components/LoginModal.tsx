@@ -20,16 +20,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Update skin preview dynamically as the user types
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
-      if (username.trim().length >= 3) {
-        setPreviewAvatar(`https://minotar.net/helm/${username.trim()}/128.png`);
-      } else {
-        setPreviewAvatar('https://minotar.net/helm/Steve/128.png');
-      }
+      setPreviewAvatar(username.trim().length >= 3
+        ? `https://minotar.net/helm/${username.trim()}/128.png`
+        : 'https://minotar.net/helm/Steve/128.png');
     }, 400);
-
     return () => clearTimeout(delayDebounce);
   }, [username]);
 
@@ -121,7 +117,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <div className="avatar-frame">
                   <img
                     src={previewAvatar}
-                    alt="Skin Preview"
+                    alt="Podgląd postaci"
                     className="avatar-preview-img"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'https://minotar.net/helm/Steve/128.png';

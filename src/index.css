@@ -14,6 +14,7 @@
   --text-glow: rgba(255, 255, 255, 0.15);
   
   --font-main: 'Plus Jakarta Sans', 'Outfit', sans-serif;
+  --font-display: 'Unbounded', 'Outfit', sans-serif; /* page titles */
   --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-fast: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -90,7 +91,7 @@ body {
   flex-direction: column;
   height: 100vh;
   width: 100vw;
-  padding: 20px;
+  padding: 0;
   position: relative;
   z-index: 1;
 }

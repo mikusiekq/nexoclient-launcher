@@ -295,11 +295,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ config, onSaveConfig
         }
 
         .settings-title {
-          font-family: 'Outfit', sans-serif;
+          font-family: var(--font-display);
           font-size: 1.6rem;
           font-weight: 800;
-          font-style: italic;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.02em;
           color: var(--text-main);
         }
 

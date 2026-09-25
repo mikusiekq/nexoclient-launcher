@@ -21,7 +21,7 @@ interface Profile {
   name: string;
   version: string;
   accountUuid: string | null;
-  modSet: 'vanilla' | 'optimization';
+  engine: 'vanilla' | 'fabric' | 'forge' | 'neoforge' | 'quilt';
   createdAt: number;
 }
 
@@ -39,12 +39,18 @@ interface LauncherConfig {
   savedAccounts: AccountInfo[];
   profiles: Profile[];
   activeProfileId: string | null;
+  setupCompleted?: boolean;
 }
 
-const defaultConfig = (userDataPath: string): LauncherConfig => ({
+// %APPDATA%\.nexoclient — shared game data (saves, resourcepacks, options.txt, servers.dat),
+// launcher\ (config + shared assets) and profiles\<name>\ (version files + mods per profile)
+const getDefaultGamePath = () => path.join(app.getPath('appData'), '.nexoclient');
+const getLauncherDir = () => path.join(getDefaultGamePath(), 'launcher');
+
+const defaultConfig = (): LauncherConfig => ({
   ram: 4,
   javaPath: '',
-  gamePath: path.join(userDataPath, '.nexoclient'),
+  gamePath: getDefaultGamePath(),
   width: 1024,
   height: 768,
   fullscreen: false,
@@ -166,13 +172,77 @@ function downloadFile(url: string, destPath: string): Promise<void> {
   });
 }
 
-function loadConfig() {
-  const userDataPath = app.getPath('userData');
-  configPath = path.join(userDataPath, 'launcher-config.json');
-  if (fs.existsSync(configPath)) {
+// Copies data from an old layout (<userData>\game or <userData>\.nexoclient) into the new one.
+// Runs once; the old folder is left untouched.
+function migrateLegacyGameData(legacyRoot: string, newRoot: string, profiles: Profile[]) {
+  const marker = path.join(getLauncherDir(), '.legacy-migrated');
+  if (!fs.existsSync(legacyRoot) || fs.existsSync(marker) || path.resolve(legacyRoot) === path.resolve(newRoot)) return;
+
+  try {
+    fs.mkdirSync(newRoot, { recursive: true });
+
+    for (const item of ['saves', 'resourcepacks', 'shaderpacks', 'screenshots', 'config', 'options.txt', 'servers.dat']) {
+      const src = path.join(legacyRoot, item);
+      const dest = path.join(newRoot, item);
+      if (fs.existsSync(src) && !fs.existsSync(dest)) {
+        fs.cpSync(src, dest, { recursive: true });
+      }
+    }
+
+    const legacyAssets = path.join(legacyRoot, 'assets');
+    const newAssets = path.join(getLauncherDir(), 'assets');
+    if (fs.existsSync(legacyAssets) && !fs.existsSync(newAssets)) {
+      fs.cpSync(legacyAssets, newAssets, { recursive: true });
+    }
+
+    // Folders of existing profiles only: keep mods, drop per-profile options/servers (now shared in the root)
+    for (const p of profiles) {
+      const legacyDir = findLegacyProfileDir(legacyRoot, p.id, profiles);
+      if (!legacyDir) continue;
+      const src = path.join(legacyRoot, 'profiles', legacyDir);
+      const dest = path.join(newRoot, 'profiles', getProfileFolderName(p.id, profiles));
+      if (fs.existsSync(dest)) continue;
+      fs.cpSync(src, dest, { recursive: true });
+      for (const f of ['options.txt', 'servers.dat']) fs.rmSync(path.join(dest, f), { force: true });
+      stampProfileDir(dest, p.id);
+    }
+
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(marker, new Date().toISOString(), 'utf-8');
+    console.log(`Migrated legacy game data from ${legacyRoot} to ${newRoot}`);
+  } catch (e) {
+    console.error('Failed to migrate legacy game data:', e);
+  }
+}
+
+// Creates the .nexoclient layout on startup so it exists before the first game launch
+function ensureGameDirs(gamePath: string) {
+  for (const dir of [
+    getLauncherDir(),
+    path.join(gamePath, 'launcher'),
+    path.join(gamePath, 'profiles'),
+    path.join(gamePath, 'saves'),
+    path.join(gamePath, 'resourcepacks'),
+  ]) {
     try {
-      const content = fs.readFileSync(configPath, 'utf-8');
-      config = { ...defaultConfig(userDataPath), ...JSON.parse(content) };
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      console.error(`Failed to create ${dir}:`, e);
+    }
+  }
+}
+
+function loadConfig() {
+  const legacyUserData = app.getPath('userData');
+  const legacyConfigPath = path.join(legacyUserData, 'launcher-config.json');
+  const legacyGamePaths = [path.join(legacyUserData, 'game'), path.join(legacyUserData, '.nexoclient')];
+  configPath = path.join(getLauncherDir(), 'launcher-config.json');
+
+  const sourcePath = fs.existsSync(configPath) ? configPath : legacyConfigPath;
+  if (fs.existsSync(sourcePath)) {
+    try {
+      const content = fs.readFileSync(sourcePath, 'utf-8');
+      config = { ...defaultConfig(), ...JSON.parse(content) };
       // Ensure savedAccounts exists for older configs
       if (!Array.isArray(config.savedAccounts)) {
         config.savedAccounts = config.account ? [config.account] : [];
@@ -182,12 +252,21 @@ function loadConfig() {
         config.profiles = [];
       }
     } catch (e) {
-      config = defaultConfig(userDataPath);
+      config = defaultConfig();
     }
   } else {
-    config = defaultConfig(userDataPath);
-    saveConfig(config);
+    config = defaultConfig();
   }
+
+  // Move old default locations to %APPDATA%\.nexoclient
+  const legacyGamePath = legacyGamePaths.find(p => config.gamePath && path.resolve(config.gamePath) === path.resolve(p))
+    || legacyGamePaths.find(p => fs.existsSync(p));
+  if (!config.gamePath || legacyGamePaths.some(p => path.resolve(config.gamePath) === path.resolve(p))) {
+    config.gamePath = getDefaultGamePath();
+  }
+  if (legacyGamePath) migrateLegacyGameData(legacyGamePath, config.gamePath, config.profiles);
+  ensureGameDirs(config.gamePath);
+  saveConfig(config);
 }
 
 function saveConfig(newConfig: LauncherConfig) {
@@ -293,7 +372,7 @@ function isVersionSupported(versionStr: string): boolean {
 }
 
 function createWindow() {
-  const iconPath = path.join(__dirname, '../src/assets/logo-icon.png');
+  const iconPath = path.join(__dirname, '../src/assets/logo.png');
   mainWindow = new BrowserWindow({
     width: 1300,
     height: 760,
@@ -302,7 +381,7 @@ function createWindow() {
     center: true,
     title: 'NEXOCLIENT',
     backgroundColor: '#000000',
-    frame: true,
+    frame: false,
     show: false,
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
@@ -322,7 +401,6 @@ function createWindow() {
   const isDev = process.env.NODE_ENV === 'development';
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -336,71 +414,134 @@ function createWindow() {
   });
 }
 
-function syncHudModToAllProfiles() {
-  const hudSource = path.join(__dirname, 'nexoclient-1.0.0.jar');
-  if (!fs.existsSync(hudSource)) {
-    console.warn(`HUD mod source not found at ${hudSource}, skipping sync.`);
-    return;
-  }
-
+// NexoClient is a built-in mod loaded from the launcher folder (see prepareBuiltinMods), so remove copies
+// that earlier versions put into profile mods folders — they would show in the list and load twice
+function removeNexoclientFromProfiles() {
   if (!config || !config.profiles) return;
 
   for (const p of config.profiles) {
     try {
       const profileDir = getProfileDir(config.gamePath, p.id);
       const modsDir = path.join(profileDir, 'mods');
-      const hudDest = path.join(modsDir, 'nexoclient-1.0.0.jar');
-      const metaPath = path.join(profileDir, 'mods.json');
-
-      if (!fs.existsSync(modsDir)) {
-        fs.mkdirSync(modsDir, { recursive: true });
-      }
-
-      let shouldCopy = true;
-      if (fs.existsSync(hudDest)) {
-        const sourceSize = fs.statSync(hudSource).size;
-        const destSize = fs.statSync(hudDest).size;
-        if (sourceSize === destSize) {
-          shouldCopy = false;
-        }
-      }
-
-      if (shouldCopy) {
-        fs.copyFileSync(hudSource, hudDest);
-        console.log(`Synced/updated HUD mod for profile ${p.name} at ${hudDest}`);
-
-        // Register in mods.json
-        let installedMods: any[] = [];
-        if (fs.existsSync(metaPath)) {
-          try {
-            installedMods = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-          } catch (e) {
-            installedMods = [];
+      if (fs.existsSync(modsDir)) {
+        for (const file of fs.readdirSync(modsDir)) {
+          if (/^nexoclient.*\.jar$/i.test(file)) {
+            fs.rmSync(path.join(modsDir, file), { force: true });
+            console.log(`Removed ${file} from profile ${p.name}`);
           }
         }
-        if (!installedMods.some((m: any) => m.projectId === 'nexoclient')) {
-          installedMods.push({
-            projectId: 'nexoclient',
-            title: 'NexoClient',
-            versionId: '1.0.0',
-            fileName: 'nexoclient-1.0.0.jar',
-            iconUrl: 'https://img.icons8.com/color/96/minecraft.png',
-            downloadUrl: '',
-            installedAt: Date.now()
-          });
-          fs.writeFileSync(metaPath, JSON.stringify(installedMods, null, 2), 'utf-8');
+      }
+
+      const metaPath = path.join(profileDir, 'mods.json');
+      if (fs.existsSync(metaPath)) {
+        const installedMods = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        const cleaned = installedMods.filter((m: any) => m.projectId !== 'nexoclient' && !/^nexoclient/i.test(m.fileName || ''));
+        if (cleaned.length !== installedMods.length) {
+          fs.writeFileSync(metaPath, JSON.stringify(cleaned, null, 2), 'utf-8');
         }
       }
+
+      fs.rmSync(path.join(profileDir, 'libraries', 'net', 'nexoclient'), { recursive: true, force: true });
     } catch (e) {
-      console.error(`Failed to sync HUD mod for profile ${p.id}:`, e);
+      console.error(`Failed to remove NexoClient mod from profile ${p.id}:`, e);
     }
   }
 }
 
+// --- Built-in NexoClient mod ---
+// Loaded via -Dfabric.addMods from <game>\launcher\builtin\<mc version>\ instead of the profile's mods folder,
+// so it isn't listed in the mods UI and can't be removed there.
+const NEXOCLIENT_MOD_FILE = 'nexoclient-1.0.0.jar';
+const FABRIC_API_PROJECT_ID = 'P7dR8mSH';
+
+// The mod is built for ~1.21.11 (>= 1.21.11, < 1.22)
+function isNexoclientSupported(mcVersion: string): boolean {
+  const m = /^1\.21\.(\d+)/.exec(mcVersion);
+  return !!m && parseInt(m[1], 10) >= 11;
+}
+
+async function ensureBuiltinFabricApi(mcVersion: string, dir: string): Promise<string | null> {
+  const cached = fs.readdirSync(dir).find(f => f.toLowerCase().startsWith('fabric-api'));
+  if (cached) return path.join(dir, cached);
+
+  try {
+    mainWindow?.webContents.send('launch-status', 'Pobieranie Fabric API (wymagane przez NexoClient)...');
+    const versionsRaw = await httpGet(`https://api.modrinth.com/v2/project/${FABRIC_API_PROJECT_ID}/version?loaders=%5B%22fabric%22%5D&game_versions=%5B%22${mcVersion}%22%5D`);
+    const ver = JSON.parse(versionsRaw)[0];
+    const file = ver?.files?.find((f: any) => f.primary) || ver?.files?.[0];
+    if (!file) {
+      console.error(`No Fabric API build found for ${mcVersion}`);
+      return null;
+    }
+    const dest = path.join(dir, file.filename);
+    await downloadFile(file.url, dest);
+    return dest;
+  } catch (e) {
+    console.error('Failed to download built-in Fabric API:', e);
+    return null;
+  }
+}
+
+// Returns the jars to add to fabric.addMods for this launch
+async function prepareBuiltinMods(mcVersion: string, gameRoot: string, profileModsDir: string): Promise<string[]> {
+  if (!isNexoclientSupported(mcVersion)) {
+    console.log(`NexoClient mod skipped: not built for Minecraft ${mcVersion}`);
+    return [];
+  }
+
+  // Copy out of the app bundle: Java can't read files inside app.asar
+  const source = path.join(__dirname, NEXOCLIENT_MOD_FILE);
+  if (!fs.existsSync(source)) {
+    console.error(`NexoClient mod not found at ${source}`);
+    return [];
+  }
+  const dir = path.join(gameRoot, 'launcher', 'builtin', mcVersion);
+  fs.mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, NEXOCLIENT_MOD_FILE);
+  fs.copyFileSync(source, dest);
+  const mods = [dest];
+
+  // NexoClient depends on Fabric API; use the profile's own copy if it has one (two copies would conflict)
+  const profileHasFabricApi = fs.readdirSync(profileModsDir).some(f => f.toLowerCase().startsWith('fabric-api'));
+  if (!profileHasFabricApi) {
+    const fabricApi = await ensureBuiltinFabricApi(mcVersion, dir);
+    if (fabricApi) mods.push(fabricApi);
+  }
+  return mods;
+}
+
+function stripNexoclientLibrary(jsonPath: string) {
+  try {
+    const profileData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+    const libraries = profileData.libraries || [];
+    const cleaned = libraries.filter((lib: any) => !(lib.name && lib.name.startsWith('net.nexoclient:')));
+    if (cleaned.length !== libraries.length) {
+      profileData.libraries = cleaned;
+      fs.writeFileSync(jsonPath, JSON.stringify(profileData, null, 2), 'utf-8');
+    }
+  } catch (e) {
+    console.error('Failed to clean version JSON:', e);
+  }
+}
+
+// Allow only one launcher; a second launch focuses the existing window instead
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
+
 app.whenReady().then(() => {
+  if (!app.hasSingleInstanceLock()) return;
   loadConfig();
+  stampLegacyProfileDirs(config.gamePath, config.profiles);
   migrateProfileFolders(config.gamePath, config.profiles);
-  syncHudModToAllProfiles();
+  removeNexoclientFromProfiles();
   createWindow();
   if (config.discordRpc) initDiscordRPC();
 
@@ -442,70 +583,92 @@ function getProfileFolderName(profileId: string, profiles: Profile[]): string {
   }
 }
 
-function findExistingProfileDir(gamePath: string, profileId: string, oldProfiles: Profile[]): string | null {
+// Each profile folder carries a .profile-id file, so a profile only ever uses its own folder
+// (a new/renamed profile must not pick up an unrelated folder that happens to have the same name)
+const PROFILE_ID_FILE = '.profile-id';
+
+function readProfileDirId(dir: string): string | null {
+  try {
+    return fs.readFileSync(path.join(dir, PROFILE_ID_FILE), 'utf-8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function stampProfileDir(dir: string, profileId: string) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, PROFILE_ID_FILE), profileId, 'utf-8');
+}
+
+// Folder name (inside profiles\) stamped with this profile's id
+function findProfileDir(gamePath: string, profileId: string): string | null {
   const profilesParent = path.join(gamePath, 'profiles');
   if (!fs.existsSync(profilesParent)) return null;
-
-  // 1. Check the previous clean name from current config
-  const oldFolderName = getProfileFolderName(profileId, oldProfiles);
-  if (oldFolderName !== profileId) {
-    const oldPath = path.join(profilesParent, oldFolderName);
-    if (fs.existsSync(oldPath)) {
-      return oldFolderName;
-    }
-  }
-
-  // 2. Check if there's a folder named exactly the profile ID (UUID)
-  const uuidPath = path.join(profilesParent, profileId);
-  if (fs.existsSync(uuidPath)) {
-    return profileId;
-  }
-
-  // 3. Scan profiles directory for old-style folder ending with `_${profileId}`
   try {
-    const files = fs.readdirSync(profilesParent);
-    for (const f of files) {
-      if (f.endsWith(`_${profileId}`)) {
-        return f;
-      }
+    for (const f of fs.readdirSync(profilesParent)) {
+      if (readProfileDirId(path.join(profilesParent, f)) === profileId) return f;
     }
   } catch (e) {
     console.error(e);
   }
-
   return null;
 }
 
-function migrateProfileFolders(gamePath: string, profiles: Profile[], oldProfiles: Profile[] = config.profiles) {
+// Pre-.profile-id lookup (by name, raw id or `_<id>` suffix); only for unstamped folders from older versions
+function findLegacyProfileDir(gamePath: string, profileId: string, profiles: Profile[]): string | null {
   const profilesParent = path.join(gamePath, 'profiles');
-  if (!fs.existsSync(profilesParent)) {
-    try {
-      fs.mkdirSync(profilesParent, { recursive: true });
-    } catch (e) {
-      console.error('Failed to create profiles parent directory:', e);
-      return;
-    }
+  if (!fs.existsSync(profilesParent)) return null;
+
+  const candidates = [getProfileFolderName(profileId, profiles), profileId];
+  try {
+    candidates.push(...fs.readdirSync(profilesParent).filter(f => f.endsWith(`_${profileId}`)));
+  } catch (e) {
+    console.error(e);
   }
 
+  for (const c of candidates) {
+    const dir = path.join(profilesParent, c);
+    if (fs.existsSync(dir) && readProfileDirId(dir) === null) return c;
+  }
+  return null;
+}
+
+// One-time: stamp folders of existing profiles that were created before .profile-id existed
+function stampLegacyProfileDirs(gamePath: string, profiles: Profile[]) {
+  const marker = path.join(getLauncherDir(), '.profile-dirs-stamped');
+  if (fs.existsSync(marker)) return;
+  for (const p of profiles) {
+    if (findProfileDir(gamePath, p.id)) continue;
+    const legacy = findLegacyProfileDir(gamePath, p.id, profiles);
+    if (legacy) stampProfileDir(path.join(gamePath, 'profiles', legacy), p.id);
+  }
+  fs.mkdirSync(path.dirname(marker), { recursive: true });
+  fs.writeFileSync(marker, new Date().toISOString(), 'utf-8');
+}
+
+// Profile name, or "name (2)", "name (3)"… if that folder is already taken
+function getFreeProfileFolderName(gamePath: string, profileId: string, profiles: Profile[]): string {
+  const base = getProfileFolderName(profileId, profiles);
+  const profilesParent = path.join(gamePath, 'profiles');
+  let name = base;
+  for (let i = 2; fs.existsSync(path.join(profilesParent, name)) && readProfileDirId(path.join(profilesParent, name)) !== profileId; i++) {
+    name = `${base} (${i})`;
+  }
+  return name;
+}
+
+// Rename profile folders to follow profile names
+function migrateProfileFolders(gamePath: string, profiles: Profile[]) {
+  const profilesParent = path.join(gamePath, 'profiles');
   try {
+    fs.mkdirSync(profilesParent, { recursive: true });
     for (const p of profiles) {
-      const targetFolderName = getProfileFolderName(p.id, profiles);
-      const targetPath = path.join(profilesParent, targetFolderName);
-
-      // Find if there is an existing directory for this profile using the detection sequence
-      const existingDirName = findExistingProfileDir(gamePath, p.id, oldProfiles);
-
-      // If it exists and has a different name, rename it
-      if (existingDirName && existingDirName !== targetFolderName) {
-        const srcPath = path.join(profilesParent, existingDirName);
-        
-        // If targetPath already exists, we might want to avoid overwriting it
-        if (!fs.existsSync(targetPath)) {
-          fs.renameSync(srcPath, targetPath);
-          console.log(`Migrated profile folder from ${existingDirName} to ${targetFolderName}`);
-        } else {
-          console.warn(`Target path ${targetPath} already exists, cannot rename ${srcPath}`);
-        }
+      const existing = findProfileDir(gamePath, p.id);
+      if (!existing) continue;
+      const target = getFreeProfileFolderName(gamePath, p.id, profiles);
+      if (existing !== target) {
+        fs.renameSync(path.join(profilesParent, existing), path.join(profilesParent, target));
+        console.log(`Renamed profile folder ${existing} -> ${target}`);
       }
     }
   } catch (e) {
@@ -514,26 +677,14 @@ function migrateProfileFolders(gamePath: string, profiles: Profile[], oldProfile
 }
 
 function getProfileDir(gamePath: string, profileId: string): string {
-  // First, check if there is an existing directory on disk
-  const existingFolder = findExistingProfileDir(gamePath, profileId, config.profiles);
-  if (existingFolder) {
-    return path.join(gamePath, 'profiles', existingFolder);
-  }
+  const existing = findProfileDir(gamePath, profileId);
+  if (existing) return path.join(gamePath, 'profiles', existing);
 
-  // If not, use the target folder name
-  const folderName = getProfileFolderName(profileId, config.profiles);
-  return path.join(gamePath, 'profiles', folderName);
+  // New profile: create its own folder
+  const dir = path.join(gamePath, 'profiles', getFreeProfileFolderName(gamePath, profileId, config.profiles));
+  stampProfileDir(dir, profileId);
+  return dir;
 }
-
-function getProfileDirWithProfiles(gamePath: string, profileId: string, profiles: Profile[]): string {
-  const existingFolder = findExistingProfileDir(gamePath, profileId, profiles);
-  if (existingFolder) {
-    return path.join(gamePath, 'profiles', existingFolder);
-  }
-  const folderName = getProfileFolderName(profileId, profiles);
-  return path.join(gamePath, 'profiles', folderName);
-}
-
 // --- IPC IPC HANDLERS ---
 
 // Config
@@ -543,51 +694,7 @@ ipcMain.handle('save-config', (_event, newConfig: LauncherConfig) => {
 
   // Rename profile folders if they exist on disk and name has changed, or if they were created as UUID-only
   if (newConfig && newConfig.profiles) {
-    migrateProfileFolders(newConfig.gamePath, newConfig.profiles, config.profiles);
-
-    // Auto-inject HUD mod to any new profiles
-    for (const p of newConfig.profiles) {
-      const isNew = !config.profiles.some(oldP => oldP.id === p.id);
-      if (isNew) {
-        const profileDir = getProfileDirWithProfiles(newConfig.gamePath, p.id, newConfig.profiles);
-        const modsDir = path.join(profileDir, 'mods');
-        const hudSource = path.join(__dirname, 'nexoclient-1.0.0.jar');
-        const hudDest = path.join(modsDir, 'nexoclient-1.0.0.jar');
-        const metaPath = path.join(profileDir, 'mods.json');
-
-        if (fs.existsSync(hudSource)) {
-          if (!fs.existsSync(modsDir)) {
-            fs.mkdirSync(modsDir, { recursive: true });
-          }
-          fs.copyFileSync(hudSource, hudDest);
-          console.log(`Auto-injected HUD mod to new profile ${p.name} at ${hudDest}`);
-
-          // Register in mods.json
-          let installedMods: any[] = [];
-          if (fs.existsSync(metaPath)) {
-            try {
-              installedMods = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-            } catch (e) {
-              installedMods = [];
-            }
-          }
-          if (!installedMods.some((m: any) => m.projectId === 'nexoclient')) {
-            installedMods.push({
-              projectId: 'nexoclient',
-              title: 'NexoClient',
-              versionId: '1.0.0',
-              fileName: 'nexoclient-1.0.0.jar',
-              iconUrl: 'https://img.icons8.com/color/96/minecraft.png',
-              downloadUrl: '',
-              installedAt: Date.now()
-            });
-            fs.writeFileSync(metaPath, JSON.stringify(installedMods, null, 2), 'utf-8');
-          }
-        } else {
-          console.warn(`Could not auto-inject HUD mod because source was not found at ${hudSource}`);
-        }
-      }
-    }
+    migrateProfileFolders(newConfig.gamePath, newConfig.profiles);
   }
 
   saveConfig(newConfig);
@@ -810,97 +917,6 @@ ipcMain.handle('login-microsoft', async () => {
   }
 });
 
-// Upload skin to Mojang API
-ipcMain.handle('upload-mojang-skin', async (_event, token: string, base64DataUrl: string, modelType: 'default' | 'slim') => {
-  try {
-    let buffer: Buffer;
-    if (base64DataUrl.startsWith('data:')) {
-      const base64Data = base64DataUrl.split(',')[1];
-      if (!base64Data) {
-        throw new Error('Invalid skin data URL format.');
-      }
-      buffer = Buffer.from(base64Data, 'base64');
-    } else if (base64DataUrl.startsWith('http://') || base64DataUrl.startsWith('https://')) {
-      console.log('[SKIN UPLOAD] Skin URL is a web address, downloading:', base64DataUrl);
-      const res = await fetch(base64DataUrl);
-      if (!res.ok) {
-        throw new Error(`Nie udało się pobrać skina z adresu URL: ${res.status} ${res.statusText}`);
-      }
-      const arrayBuffer = await res.arrayBuffer();
-      buffer = Buffer.from(arrayBuffer);
-    } else {
-      throw new Error('Nieobsługiwany format adresu URL skina.');
-    }
-    
-    // Generate RFC-compliant multipart boundary
-    const boundary = '----ElectronMultipartBoundary' + Math.random().toString(36).slice(2);
-    const CRLF = '\r\n';
-    const parts = [];
-    
-    // Append variant parameter
-    parts.push(`--${boundary}${CRLF}`);
-    parts.push(`Content-Disposition: form-data; name="variant"${CRLF}${CRLF}`);
-    parts.push(`${modelType === 'slim' ? 'slim' : 'classic'}${CRLF}`);
-
-    // Append model parameter (fallback for some Mojang endpoints)
-    parts.push(`--${boundary}${CRLF}`);
-    parts.push(`Content-Disposition: form-data; name="model"${CRLF}${CRLF}`);
-    parts.push(`${modelType === 'slim' ? 'slim' : 'classic'}${CRLF}`);
-    
-    // Append file parameter header
-    parts.push(`--${boundary}${CRLF}`);
-    parts.push(`Content-Disposition: form-data; name="file"; filename="skin.png"${CRLF}`);
-    parts.push(`Content-Type: image/png${CRLF}${CRLF}`);
-    
-    const headerBuffers = parts.map(p => Buffer.from(p, 'utf-8'));
-    const fileBuffer = buffer;
-    const footerBuffer = Buffer.from(`${CRLF}--${boundary}--${CRLF}`, 'utf-8');
-    
-    const bodyBuffer = Buffer.concat([
-      ...headerBuffers,
-      fileBuffer,
-      footerBuffer
-    ]);
-
-    const response = await fetch('https://api.minecraftservices.com/minecraft/profile/skins', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': String(bodyBuffer.length)
-      },
-      body: bodyBuffer
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      const status = response.status;
-      const statusText = response.statusText;
-      console.error(`[SKIN UPLOAD ERROR] Status: ${status} (${statusText}), Body: ${errText}`);
-      
-      let parsed;
-      try {
-        parsed = JSON.parse(errText);
-      } catch (_) {}
-      
-      let msg = parsed?.errorMessage || parsed?.error || errText;
-      if (status === 401) {
-        msg = 'Twój token wygasł. Zaloguj się ponownie w zakładce Konta.';
-      } else if (status === 403) {
-        msg = 'Brak licencji Minecraft na tym koncie Microsoft.';
-      } else {
-        msg = `Błąd API Mojang (${status} ${statusText}): ${msg}`;
-      }
-      throw new Error(msg);
-    }
-
-    return { success: true };
-  } catch (error: any) {
-    console.error('Failed to upload skin to Mojang in main process:', error);
-    throw new Error(error.message || error);
-  }
-});
-
 // Launch Minecraft
 ipcMain.handle('launch-game', async (_event, versionStr: string) => {
   if (!config.account) {
@@ -912,43 +928,137 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
   }
 
   try {
-    mainWindow?.webContents.send('launch-status', 'Przygotowywanie wersji Fabric...');
-    
-    // Fetch latest stable Fabric loader version dynamically
-    const loadersRaw = await httpGet('https://meta.fabricmc.net/v2/versions/loader');
-    const loaders = JSON.parse(loadersRaw);
-    const loaderVersion = loaders.find((l: any) => l.stable)?.version || loaders[0]?.version || '0.16.10';
-    
-    const versionId = `fabric-loader-${loaderVersion}-${versionStr}`;
-    const versionDir = path.join(config.gamePath, 'versions', versionId);
-    const jsonPath = path.join(versionDir, `${versionId}.json`);
-    
-    // Check if Fabric version JSON profile exists. If not, download it.
-    if (!fs.existsSync(jsonPath)) {
-      mainWindow?.webContents.send('launch-status', 'Pobieranie profilu Fabric...');
-      fs.mkdirSync(versionDir, { recursive: true });
-      
-      const profileUrl = `https://meta.fabricmc.net/v2/versions/loader/${versionStr}/${loaderVersion}/profile/json`;
-      const profileJson = await httpGet(profileUrl);
-      fs.writeFileSync(jsonPath, profileJson, 'utf-8');
-    }
+    const activeProfile = config.profiles?.find(p => p.id === config.activeProfileId);
+    const engine = activeProfile?.engine || 'vanilla';
+    let versionId = versionStr;
 
-    // Read the version JSON and ensure our custom library is present
-    try {
-      const profileJson = fs.readFileSync(jsonPath, 'utf-8');
-      const profileData = JSON.parse(profileJson);
-      if (!profileData.libraries) {
-        profileData.libraries = [];
+    // Version files, libraries and mods live in the profile folder; saves/settings/servers/resourcepacks in the shared root
+    fs.mkdirSync(config.gamePath, { recursive: true });
+    // Resolve the real on-disk path. When Windows redirects AppData (e.g. a launcher started from a packaged app),
+    // Java reports class locations under the redirected path; if the classpath used the original one, Fabric
+    // wouldn't recognise its own loader jar and would crash with "trying to load ... from target class loader".
+    const gameRoot = fs.realpathSync.native(config.gamePath);
+    const instanceDir = activeProfile
+      ? path.join(gameRoot, 'profiles', path.basename(getProfileDir(config.gamePath, activeProfile.id)))
+      : gameRoot;
+    fs.mkdirSync(instanceDir, { recursive: true });
+
+    if (engine === 'vanilla') {
+      versionId = versionStr;
+    } else if (engine === 'fabric') {
+      mainWindow?.webContents.send('launch-status', 'Przygotowywanie wersji Fabric...');
+      const loadersRaw = await httpGet('https://meta.fabricmc.net/v2/versions/loader');
+      const loaders = JSON.parse(loadersRaw);
+      const loaderVersion = loaders.find((l: any) => l.stable)?.version || loaders[0]?.version || '0.16.10';
+      
+      versionId = `fabric-loader-${loaderVersion}-${versionStr}`;
+      const versionDir = path.join(instanceDir, 'versions', versionId);
+      const jsonPath = path.join(versionDir, `${versionId}.json`);
+      
+      if (!fs.existsSync(jsonPath)) {
+        mainWindow?.webContents.send('launch-status', 'Pobieranie profilu Fabric...');
+        fs.mkdirSync(versionDir, { recursive: true });
+        
+        const profileUrl = `https://meta.fabricmc.net/v2/versions/loader/${versionStr}/${loaderVersion}/profile/json`;
+        const profileJson = await httpGet(profileUrl);
+        fs.writeFileSync(jsonPath, profileJson, 'utf-8');
       }
-      const hasCoreLib = profileData.libraries.some((lib: any) => lib.name && lib.name.startsWith('net.nexoclient:nexoclient-core'));
-      if (!hasCoreLib) {
-        profileData.libraries.unshift({
-          name: 'net.nexoclient:nexoclient-core:1.0.0'
+
+      stripNexoclientLibrary(jsonPath);
+    } else if (engine === 'quilt') {
+      mainWindow?.webContents.send('launch-status', 'Przygotowywanie wersji Quilt...');
+      const loadersRaw = await httpGet('https://meta.quiltmc.org/v3/versions/loader');
+      const loaders = JSON.parse(loadersRaw);
+      const loaderVersion = loaders.find((l: any) => l.stable)?.version || loaders[0]?.version || '0.26.3';
+      
+      versionId = `quilt-loader-${loaderVersion}-${versionStr}`;
+      const versionDir = path.join(instanceDir, 'versions', versionId);
+      const jsonPath = path.join(versionDir, `${versionId}.json`);
+      
+      if (!fs.existsSync(jsonPath)) {
+        mainWindow?.webContents.send('launch-status', 'Pobieranie profilu Quilt...');
+        fs.mkdirSync(versionDir, { recursive: true });
+        
+        const profileUrl = `https://meta.quiltmc.org/v3/versions/loader/${versionStr}/${loaderVersion}/profile/json`;
+        const profileJson = await httpGet(profileUrl);
+        fs.writeFileSync(jsonPath, profileJson, 'utf-8');
+      }
+
+      stripNexoclientLibrary(jsonPath);
+    } else if (engine === 'forge') {
+      mainWindow?.webContents.send('launch-status', 'Pobieranie rekomendowanej wersji Forge...');
+      let forgeVersion = '';
+      try {
+        const promoRaw = await httpGet('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json');
+        const promo = JSON.parse(promoRaw);
+        forgeVersion = promo.promos[`${versionStr}-recommended`] || promo.promos[`${versionStr}-latest`];
+      } catch (e) {
+        if (versionStr === '1.20.1') forgeVersion = '47.3.0';
+        else if (versionStr === '1.20.4') forgeVersion = '49.0.38';
+        else if (versionStr === '1.19.4') forgeVersion = '45.3.0';
+        else forgeVersion = '47.2.0';
+      }
+      
+      if (!forgeVersion) {
+        throw new Error(`Silnik Forge nie jest dostępny dla wersji Minecraft ${versionStr}.`);
+      }
+
+      versionId = `${versionStr}-forge-${forgeVersion}`;
+      const versionDir = path.join(instanceDir, 'versions', versionId);
+      const jsonPath = path.join(versionDir, `${versionId}.json`);
+      
+      if (!fs.existsSync(jsonPath)) {
+        mainWindow?.webContents.send('launch-status', `Pobieranie instalatora Forge ${forgeVersion}...`);
+        const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${versionStr}-${forgeVersion}/forge-${versionStr}-${forgeVersion}-installer.jar`;
+        const installerPath = path.join(instanceDir, 'forge-installer.jar');
+        
+        await downloadFile(installerUrl, installerPath);
+        
+        mainWindow?.webContents.send('launch-status', 'Instalowanie silnika Forge (może to potrwać chwilę)...');
+        const javaExecutable = config.javaPath || 'java';
+        
+        const { exec } = require('child_process');
+        await new Promise<void>((resolve, reject) => {
+          exec(`"${javaExecutable}" -jar "${installerPath}" --installClient "${instanceDir}"`, (err: any) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
-        fs.writeFileSync(jsonPath, JSON.stringify(profileData, null, 2), 'utf-8');
+        
+        try { fs.unlinkSync(installerPath); } catch (e) {}
       }
-    } catch (e) {
-      console.error('Failed to inject nexoclient-core library into version JSON:', e);
+    } else if (engine === 'neoforge') {
+      mainWindow?.webContents.send('launch-status', 'Rozwiązywanie wersji NeoForge...');
+      let neoforgeVersion = '';
+      if (versionStr === '1.20.1') neoforgeVersion = '20.1.89';
+      else if (versionStr === '1.20.4') neoforgeVersion = '20.4.80';
+      else if (versionStr === '1.21.1') neoforgeVersion = '21.1.81';
+      else neoforgeVersion = '21.1.81';
+      
+      versionId = `${versionStr}-neoforge-${neoforgeVersion}`;
+      const versionDir = path.join(instanceDir, 'versions', versionId);
+      const jsonPath = path.join(versionDir, `${versionId}.json`);
+      
+      if (!fs.existsSync(jsonPath)) {
+        mainWindow?.webContents.send('launch-status', `Pobieranie instalatora NeoForge ${neoforgeVersion}...`);
+        const installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${neoforgeVersion}/neoforge-${neoforgeVersion}-installer.jar`;
+        const installerPath = path.join(instanceDir, 'neoforge-installer.jar');
+        
+        await downloadFile(installerUrl, installerPath);
+        
+        mainWindow?.webContents.send('launch-status', 'Instalowanie silnika NeoForge (może to potrwać chwilę)...');
+        const javaExecutable = config.javaPath || 'java';
+        
+        const { exec } = require('child_process');
+        await new Promise<void>((resolve, reject) => {
+          exec(`"${javaExecutable}" -jar "${installerPath}" --installClient "${instanceDir}"`, (err: any) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        
+        try { fs.unlinkSync(installerPath); } catch (e) {}
+      }
     }
 
     // Remove known broken/incompatible mods from the active profile
@@ -957,11 +1067,14 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
         const profileDir = getProfileDir(config.gamePath, config.activeProfileId);
         const modsDir = path.join(profileDir, 'mods');
         if (fs.existsSync(modsDir)) {
-          const BROKEN_MODS = ['cullleaves', 'cull-leaves', 'cull_leaves'];
+          const BROKEN_MODS = [
+            'cullleaves', 'cull-leaves', 'cull_leaves',
+            'entity_texture_features', 'entity-texture-features', 'entitytexturefeatures', 'entity_texture', 'entitytexture'
+          ];
           const files = fs.readdirSync(modsDir);
           for (const file of files) {
             const lf = file.toLowerCase();
-            if (BROKEN_MODS.some(name => lf.startsWith(name))) {
+            if (BROKEN_MODS.some(name => lf.includes(name))) {
               fs.unlinkSync(path.join(modsDir, file));
               console.log(`Removed incompatible mod: ${file}`);
               // Also remove from mods.json
@@ -969,7 +1082,7 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
               if (fs.existsSync(metaPath)) {
                 try {
                   let mods = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-                  mods = mods.filter((m: any) => !BROKEN_MODS.some(n => (m.fileName || '').toLowerCase().startsWith(n)));
+                  mods = mods.filter((m: any) => !BROKEN_MODS.some(n => (m.fileName || '').toLowerCase().includes(n) || (m.projectId || '').toLowerCase().includes(n)));
                   fs.writeFileSync(metaPath, JSON.stringify(mods, null, 2), 'utf-8');
                 } catch (e) {}
               }
@@ -981,114 +1094,10 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
       }
     }
 
-    // Ensure Fabric API is present in the active profile (required by nexoclient)
-    if (config.activeProfileId) {
-      try {
-        const profileDir = getProfileDir(config.gamePath, config.activeProfileId);
-        const modsDir = path.join(profileDir, 'mods');
-        if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir, { recursive: true });
-
-        const metaPath = path.join(profileDir, 'mods.json');
-        let installedMods: any[] = [];
-        if (fs.existsSync(metaPath)) {
-          try { installedMods = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch (e) { installedMods = []; }
-        }
-
-        const hasFabricApi = installedMods.some((m: any) => m.projectId === 'P7dR8mSH') ||
-          fs.readdirSync(modsDir).some(f => f.toLowerCase().startsWith('fabric-api'));
-
-        if (!hasFabricApi) {
-          mainWindow?.webContents.send('launch-status', 'Pobieranie Fabric API (wymagane)...');
-          try {
-            const versionsRaw = await httpGet(`https://api.modrinth.com/v2/project/P7dR8mSH/version?loaders=%5B%22fabric%22%5D&game_versions=%5B%22${versionStr}%22%5D`);
-            const versionsData = JSON.parse(versionsRaw);
-            if (versionsData && versionsData.length > 0) {
-              const ver = versionsData[0];
-              const file = ver.files.find((f: any) => f.primary) || ver.files[0];
-              if (file) {
-                const destPath = path.join(modsDir, file.filename);
-                await downloadFile(file.url, destPath);
-                installedMods = installedMods.filter((m: any) => m.projectId !== 'P7dR8mSH');
-                installedMods.push({
-                  projectId: 'P7dR8mSH',
-                  title: 'Fabric API',
-                  versionId: ver.id,
-                  fileName: file.filename,
-                  iconUrl: undefined,
-                  downloadUrl: file.url,
-                  installedAt: Date.now()
-                });
-                fs.writeFileSync(metaPath, JSON.stringify(installedMods, null, 2), 'utf-8');
-                console.log(`Auto-installed Fabric API to profile ${config.activeProfileId}`);
-              }
-            }
-          } catch (e) {
-            console.error('Failed to auto-install Fabric API:', e);
-          }
-        }
-      } catch (e) {
-        console.error('Failed to check/install Fabric API:', e);
-      }
-    }
-
-    // Sync isolated mods folder, options.txt, and servers.dat for the active profile to global game directory
-    if (config.activeProfileId) {
-      mainWindow?.webContents.send('launch-status', 'Synchronizowanie profilu...');
-      const globalModsDir = path.join(config.gamePath, 'mods');
-      
-      // Clear global mods folder first
-      if (fs.existsSync(globalModsDir)) {
-        try {
-          fs.rmSync(globalModsDir, { recursive: true, force: true });
-        } catch (e) {
-          console.error('Failed to clear global mods directory:', e);
-        }
-      }
-      fs.mkdirSync(globalModsDir, { recursive: true });
-
-      // Copy mods from active profile mods folder
-      const profileDir = getProfileDir(config.gamePath, config.activeProfileId);
-      const profileModsDir = path.join(profileDir, 'mods');
-      if (fs.existsSync(profileModsDir)) {
-        try {
-          const files = fs.readdirSync(profileModsDir);
-          for (const file of files) {
-            const srcPath = path.join(profileModsDir, file);
-            const destPath = path.join(globalModsDir, file);
-            if (fs.statSync(srcPath).isFile()) {
-              fs.copyFileSync(srcPath, destPath);
-            }
-          }
-        } catch (e) {
-          console.error('Failed to copy profile mods:', e);
-        }
-      }
-
-      // Sync settings (options.txt) and servers (servers.dat)
-      try {
-        if (!fs.existsSync(profileDir)) {
-          fs.mkdirSync(profileDir, { recursive: true });
-        }
-
-        const globalOptionsPath = path.join(config.gamePath, 'options.txt');
-        const profileOptionsPath = path.join(profileDir, 'options.txt');
-        if (fs.existsSync(profileOptionsPath)) {
-          fs.copyFileSync(profileOptionsPath, globalOptionsPath);
-        } else if (fs.existsSync(globalOptionsPath)) {
-          fs.copyFileSync(globalOptionsPath, profileOptionsPath);
-        }
-
-        const globalServersPath = path.join(config.gamePath, 'servers.dat');
-        const profileServersPath = path.join(profileDir, 'servers.dat');
-        if (fs.existsSync(profileServersPath)) {
-          fs.copyFileSync(profileServersPath, globalServersPath);
-        } else if (fs.existsSync(globalServersPath)) {
-          fs.copyFileSync(globalServersPath, profileServersPath);
-        }
-      } catch (e) {
-        console.error('Failed to sync profile settings on launch:', e);
-      }
-    }
+    // Mods are loaded straight from the profile folder (see -Dfabric.addMods below)
+    const profileModsDir = path.join(instanceDir, 'mods');
+    fs.mkdirSync(profileModsDir, { recursive: true });
+    const builtinMods = engine === 'fabric' ? await prepareBuiltinMods(versionStr, gameRoot, profileModsDir) : [];
 
     mainWindow?.webContents.send('launch-status', 'Inicjalizacja pobierania Minecraft...');
 
@@ -1118,29 +1127,18 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
       } catch (e) {}
     }
 
-    // Write nexoclient-core.jar to the gamePath libraries folder
-    const libraryDestPath = path.join(config.gamePath, 'libraries', 'net', 'nexoclient', 'nexoclient-core', '1.0.0', 'nexoclient-core-1.0.0.jar');
-    const coreSourcePath = path.join(__dirname, 'nexoclient-core.jar');
-    try {
-      const libraryDestDir = path.dirname(libraryDestPath);
-      if (!fs.existsSync(libraryDestDir)) {
-        fs.mkdirSync(libraryDestDir, { recursive: true });
-      }
-      if (fs.existsSync(coreSourcePath)) {
-        fs.copyFileSync(coreSourcePath, libraryDestPath);
-      } else {
-        console.error('Core JAR source file not found at:', coreSourcePath);
-      }
-    } catch (e) {
-      console.error('Failed to write nexoclient-core JAR:', e);
-    }
-
     const javaExecutable = config.javaPath || 'java';
 
     const options = {
       authorization: launcherAuth,
-      root: config.gamePath,
+      root: instanceDir,
       javaPath: javaExecutable,
+      overrides: {
+        // Shared: saves, resourcepacks, options.txt, servers.dat
+        gameDirectory: gameRoot,
+        // Shared asset cache so each profile doesn't download its own copy
+        assetRoot: path.join(gameRoot, 'launcher', 'assets'),
+      },
       version: {
         number: versionStr,
         type: 'release',
@@ -1156,17 +1154,26 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
         fullscreen: config.fullscreen
       },
       customArgs: [
-        `-Dnexoclient.title=NEXOCLIENT wersja ${app.getVersion()}`
+        `-Dfabric.addMods=${[profileModsDir, ...builtinMods].join(path.delimiter)}`
       ]
     };
 
     // Bind event listeners for launch progress
+    // Never show the session token in the console (MCLC logs the full launch arguments)
+    const redact = (text: string) => {
+      let out = String(text).replace(/(--(?:accessToken|xuid)\s+)\S+/g, '$1[ukryte]');
+      if (launcherAuth.access_token && launcherAuth.access_token.length > 20) {
+        out = out.split(launcherAuth.access_token).join('[ukryte]');
+      }
+      return out;
+    };
+
     launcher.on('debug', (e) => {
-      mainWindow?.webContents.send('launcher-log', `[DEBUG] ${e}`);
+      mainWindow?.webContents.send('launcher-log', `[DEBUG] ${redact(e)}`);
     });
-    
+
     launcher.on('data', (e) => {
-      mainWindow?.webContents.send('launcher-log', e);
+      mainWindow?.webContents.send('launcher-log', redact(e));
     });
 
     launcher.on('progress', (e) => {
@@ -1196,29 +1203,6 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
     }
 
     activeGameProcess.on('close', (code: number) => {
-      // Sync back options.txt and servers.dat from global to profile
-      if (config.activeProfileId) {
-        try {
-          const profileDir = getProfileDir(config.gamePath, config.activeProfileId);
-          if (!fs.existsSync(profileDir)) {
-            fs.mkdirSync(profileDir, { recursive: true });
-          }
-          const globalOptionsPath = path.join(config.gamePath, 'options.txt');
-          const profileOptionsPath = path.join(profileDir, 'options.txt');
-          if (fs.existsSync(globalOptionsPath)) {
-            fs.copyFileSync(globalOptionsPath, profileOptionsPath);
-          }
-
-          const globalServersPath = path.join(config.gamePath, 'servers.dat');
-          const profileServersPath = path.join(profileDir, 'servers.dat');
-          if (fs.existsSync(globalServersPath)) {
-            fs.copyFileSync(globalServersPath, profileServersPath);
-          }
-        } catch (e) {
-          console.error('Failed to sync back profile settings on close:', e);
-        }
-      }
-
       activeGameProcess = null;
       mainWindow?.webContents.send('game-closed', code);
     });
@@ -1232,64 +1216,20 @@ ipcMain.handle('launch-game', async (_event, versionStr: string) => {
   }
 });
 
-// Browse for .minecraft folder
-ipcMain.handle('browse-mc-folder', async () => {
-  if (!mainWindow) return null;
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Wybierz folder .minecraft',
-    properties: ['openDirectory']
-  });
-  if (!result.canceled && result.filePaths.length > 0) {
-    return result.filePaths[0];
-  }
-  return null;
+ipcMain.on('window-minimize', () => {
+  mainWindow?.minimize();
 });
 
-// Import Minecraft settings (options.txt + servers.dat) from given .minecraft folder
-// If mcPath is empty, auto-detect default %APPDATA%\.minecraft
-ipcMain.handle('import-minecraft-settings', async (_event, mcPath: string) => {
-  let copiedOptions = false;
-  let copiedServers = false;
-  try {
-    const gameDir = config.gamePath;
-    if (!fs.existsSync(gameDir)) {
-      fs.mkdirSync(gameDir, { recursive: true });
+ipcMain.on('window-maximize', () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
     }
-
-    // Auto-detect default .minecraft path if none provided
-    const resolvedPath = mcPath && mcPath.length > 0
-      ? mcPath
-      : path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), '.minecraft');
-
-    const srcOptions = path.join(resolvedPath, 'options.txt');
-    if (fs.existsSync(srcOptions)) {
-      fs.copyFileSync(srcOptions, path.join(gameDir, 'options.txt'));
-      copiedOptions = true;
-
-      // Copy to active profile as well
-      if (config.activeProfileId) {
-        const profileDir = getProfileDir(gameDir, config.activeProfileId);
-        if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
-        fs.copyFileSync(srcOptions, path.join(profileDir, 'options.txt'));
-      }
-    }
-
-    const srcServers = path.join(resolvedPath, 'servers.dat');
-    if (fs.existsSync(srcServers)) {
-      fs.copyFileSync(srcServers, path.join(gameDir, 'servers.dat'));
-      copiedServers = true;
-
-      // Copy to active profile as well
-      if (config.activeProfileId) {
-        const profileDir = getProfileDir(gameDir, config.activeProfileId);
-        if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
-        fs.copyFileSync(srcServers, path.join(profileDir, 'servers.dat'));
-      }
-    }
-
-    return { success: true, copiedOptions, copiedServers };
-  } catch (e: any) {
-    console.error('Import minecraft settings failed:', e);
-    return { success: false, copiedOptions, copiedServers };
   }
+});
+
+ipcMain.on('window-close', () => {
+  mainWindow?.close();
 });

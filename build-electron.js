@@ -1,34 +1,55 @@
 const esbuild = require('esbuild');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 const watch = process.argv.includes('--watch');
 
 let electronProcess = null;
+let restartTimer = null;
+
+// Kill Electron together with its GPU/utility child processes
+function killElectron() {
+  if (!electronProcess) return;
+  const proc = electronProcess;
+  electronProcess = null;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    proc.kill();
+  }
+}
 
 function startElectron() {
-  if (electronProcess) {
-    electronProcess.kill();
-    electronProcess = null;
-  }
-  
-  electronProcess = spawn('npx', ['electron', '.'], {
+  killElectron();
+
+  // Spawn the Electron binary directly (no shell), so the PID we kill is Electron itself
+  const proc = spawn(require('electron'), ['.'], {
     stdio: 'inherit',
-    shell: true,
     env: {
       ...process.env,
       NODE_ENV: watch ? 'development' : 'production'
     }
   });
+  electronProcess = proc;
 
-  electronProcess.on('close', () => {
+  proc.on('close', () => {
+    if (electronProcess === proc) electronProcess = null;
     // If Electron is closed by user in watch mode, don't exit the script, just wait for changes.
     // If not in watch mode, exit the process.
     if (!watch) {
       process.exit(0);
     }
   });
+}
+
+// main.ts and preload.ts rebuild separately; collapse them into a single restart
+function scheduleRestart() {
+  clearTimeout(restartTimer);
+  restartTimer = setTimeout(() => {
+    console.log('Files changed, restarting Electron...');
+    startElectron();
+  }, 300);
 }
 
 function copyCoreJar() {
@@ -95,18 +116,15 @@ async function run() {
     });
 
     // 2. Set up watch plugins for restarting electron on build
+    let electronLaunched = false;
     const rebuildPlugin = {
       name: 'rebuild-notifier',
       setup(build) {
-        let isFirstBuild = true;
         build.onEnd(result => {
           if (result.errors.length === 0) {
             console.log(`Successfully built: ${build.initialOptions.entryPoints[0]}`);
-            if (!isFirstBuild) {
-              console.log('Files changed, restarting Electron...');
-              startElectron();
-            }
-            isFirstBuild = false;
+            // Builds before the first launch (initial build + watch start) must not spawn Electron
+            if (electronLaunched) scheduleRestart();
           }
         });
       }
@@ -131,15 +149,19 @@ async function run() {
     // Give Vite a second to start up before opening Electron
     setTimeout(() => {
       console.log('Launching Electron...');
+      electronLaunched = true;
       startElectron();
     }, 1500);
 
     // Handle clean shutdown
-    process.on('SIGINT', () => {
-      if (electronProcess) electronProcess.kill();
+    const shutdown = () => {
+      killElectron();
       viteProcess.kill();
       process.exit(0);
-    });
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+    process.on('exit', killElectron);
   } else {
     console.log('Building Electron production assets...');
     await esbuild.build(mainOptions);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { WifiOff, Trash2, Check, LogIn, ShieldAlert, ChevronRight, User } from 'lucide-react';
+import { WifiOff, Trash2, Check, LogIn, ShieldAlert } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 interface AccountsViewProps {
@@ -7,7 +7,6 @@ interface AccountsViewProps {
   onSaveConfig: (config: LauncherConfig) => Promise<void>;
   onLoginOffline: (username: string) => Promise<void>;
   onLoginMicrosoft: () => Promise<void>;
-  isOnboarding?: boolean;
 }
 
 export const AccountsView: React.FC<AccountsViewProps> = ({
@@ -15,7 +14,6 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   onSaveConfig,
   onLoginOffline,
   onLoginMicrosoft,
-  isOnboarding = false,
 }) => {
   const { t } = useLanguage();
   const [offlineUsername, setOfflineUsername] = useState('');
@@ -72,289 +70,6 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     onSaveConfig({ ...config, savedAccounts: filtered, account: newActive });
   };
 
-  const showOnboarding = isOnboarding && savedAccounts.length === 0;
-
-  if (showOnboarding) {
-    return (
-      <div className="accounts-view animate-fade-in onboarding-mode">
-        {/* Page header */}
-        <div className="accounts-page-header">
-          <div className="accounts-header-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </div>
-          <div className="accounts-header-left">
-            <h1 className="accounts-title">{t('accounts.title')}</h1>
-            <span className="accounts-subtitle">{t('accounts.subtitle')}</span>
-          </div>
-        </div>
-
-        <div className="onb-center-wrap">
-          <div className="onb-layout">
-            {/* LEFT */}
-            <div className="onb-left">
-              <div className="onb-badge">
-                <span className="onb-badge-icon">✦</span>
-                <span>Pierwsze kroki</span>
-              </div>
-              <h2 className="onb-title">Witaj! Skonfigurujmy Twoje konto</h2>
-              <p className="onb-desc">Przed grą w Minecraft musisz dodać konto. Wybierz konto offline do gry jednoosobowej lub zaloguj się pełnoprawnym kontem Microsoft.</p>
-              <div className="onb-steps">
-                <div className="onb-step onb-step-active">
-                  <div className="onb-step-num">1</div>
-                  <div className="onb-step-text">
-                    <div className="onb-step-title">Dodaj konto</div>
-                    <div className="onb-step-desc">Wybierz konto offline lub Microsoft</div>
-                  </div>
-                </div>
-                <div className="onb-step">
-                  <div className="onb-step-num onb-step-num-dim">2</div>
-                  <div className="onb-step-text">
-                    <div className="onb-step-title">Utwórz profil</div>
-                    <div className="onb-step-desc">Skonfiguruj ustawienia gry</div>
-                  </div>
-                </div>
-                <div className="onb-step">
-                  <div className="onb-step-num onb-step-num-dim">3</div>
-                  <div className="onb-step-text">
-                    <div className="onb-step-title">Graj!</div>
-                    <div className="onb-step-desc">Uruchom Minecraft i baw się</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT */}
-            <div className="onb-right">
-              <div className="onb-right-label">Wybierz metodę logowania:</div>
-              {error && (
-                <div className="alert-card alert-error" style={{ marginBottom: '8px' }}>
-                  <ShieldAlert size={15} />
-                  <span>{error}</span>
-                </div>
-              )}
-              {!showOfflineInput ? (
-                <>
-                  <button className="login-method-card" onClick={() => setShowOfflineInput(true)}>
-                    <div className="lmc-icon lmc-offline"><User size={16} /></div>
-                    <div className="lmc-info">
-                      <div className="lmc-name">Konto offline</div>
-                      <div className="lmc-desc">Graj bez konta – tylko nick, żadnych haseł</div>
-                    </div>
-                    <ChevronRight size={16} className="lmc-chevron" />
-                  </button>
-                  <button className="login-method-card" onClick={handleAddMicrosoft} disabled={loading}>
-                    <div className="lmc-icon lmc-microsoft">
-                      <svg viewBox="0 0 23 23" width="16" height="16">
-                        <rect x="0" y="0" width="11" height="11" fill="#f25022" />
-                        <rect x="12" y="0" width="11" height="11" fill="#7fba00" />
-                        <rect x="0" y="12" width="11" height="11" fill="#00a4ef" />
-                        <rect x="12" y="12" width="11" height="11" fill="#ffb900" />
-                      </svg>
-                    </div>
-                    <div className="lmc-info">
-                      <div className="lmc-name">Konto Microsoft</div>
-                      <div className="lmc-desc">Pełny dostęp do serwerów multiplayer</div>
-                    </div>
-                    <ChevronRight size={16} className="lmc-chevron" />
-                  </button>
-                </>
-              ) : (
-                <div className="onb-offline-form">
-                  <div className="onb-offline-title">
-                    <button className="onb-back-btn" onClick={() => setShowOfflineInput(false)}>←</button>
-                    Konto offline
-                  </div>
-                  <div className="input-group" style={{ marginBottom: 0 }}>
-                    <label className="input-label">Nazwa gracza (Nick)</label>
-                    <input
-                      type="text"
-                      className="custom-input"
-                      placeholder="Wpisz nick..."
-                      value={offlineUsername}
-                      onChange={(e) => setOfflineUsername(e.target.value)}
-                      maxLength={16}
-                      disabled={loading}
-                      autoFocus
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddOffline()}
-                    />
-                  </div>
-                  <button className="onb-confirm-btn" onClick={handleAddOffline} disabled={loading || offlineUsername.trim().length < 3}>
-                    <LogIn size={15} />
-                    <span>{loading ? t('accounts.confirm_loading') : t('accounts.confirm_add')}</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <style>{`
-          .onboarding-mode {
-            flex-direction: column !important;
-          }
-
-          .accounts-page-header {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 20px 24px 16px;
-            flex-shrink: 0;
-          }
-          .accounts-header-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 14px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-main);
-            flex-shrink: 0;
-          }
-          .accounts-header-left {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-          }
-          .accounts-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.6rem;
-            font-weight: 800;
-            font-style: italic;
-            letter-spacing: 0.06em;
-            color: var(--text-main);
-          }
-          .accounts-subtitle {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            font-weight: 500;
-          }
-          .onb-center-wrap {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .onb-layout {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 48px;
-            max-width: 860px;
-            width: 100%;
-            padding: 0 40px 32px;
-          }
-          .onb-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 5px 14px;
-            background: rgba(255,255,255,0.07);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 20px;
-            color: var(--text-main);
-            font-size: 0.75rem;
-            font-weight: 700;
-            margin-bottom: 20px;
-          }
-          .onb-badge-icon { font-size: 0.85rem; }
-          .onb-title {
-            font-size: 1.5rem;
-            font-weight: 800;
-            color: var(--text-main);
-            margin-bottom: 14px;
-            line-height: 1.25;
-          }
-          .onb-desc {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            line-height: 1.6;
-            margin-bottom: 28px;
-          }
-          .onb-steps { display: flex; flex-direction: column; gap: 16px; }
-          .onb-step { display: flex; align-items: flex-start; gap: 12px; }
-          .onb-step-num {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: #ffffff;
-            color: #000000;
-            font-size: 0.8rem;
-            font-weight: 800;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-          }
-          .onb-step-num-dim {
-            background: rgba(255,255,255,0.1);
-            color: var(--text-muted);
-          }
-          .onb-step-title { font-size: 0.88rem; font-weight: 700; color: var(--text-main); }
-          .onb-step-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
-          .onb-right { display: flex; flex-direction: column; gap: 10px; justify-content: center; }
-          .onb-right-label { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
-          .login-method-card {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            padding: 16px;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 10px;
-            cursor: pointer;
-            transition: var(--transition-smooth);
-            text-align: left;
-            color: var(--text-main);
-            width: 100%;
-          }
-          .login-method-card:hover:not(:disabled) {
-            background: rgba(255,255,255,0.07);
-            border-color: rgba(255,255,255,0.2);
-          }
-          .login-method-card:disabled { opacity: 0.5; cursor: not-allowed; }
-          .lmc-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-          }
-          .lmc-offline { background: rgba(255,255,255,0.08); color: var(--text-main); }
-          .lmc-microsoft { background: rgba(255,255,255,0.06); }
-          .lmc-info { flex: 1; }
-          .lmc-name { font-size: 0.88rem; font-weight: 700; color: var(--text-main); }
-          .lmc-desc { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
-          .lmc-chevron { color: var(--text-muted); flex-shrink: 0; }
-          .onb-offline-form { display: flex; flex-direction: column; gap: 12px; }
-          .onb-offline-title { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; font-weight: 700; color: var(--text-main); }
-          .onb-back-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; padding: 0; }
-          .onb-back-btn:hover { color: var(--text-main); }
-          .onb-confirm-btn {
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-            padding: 12px;
-            background: #ffffff;
-            color: #000000;
-            border: 1px solid #ffffff;
-            border-radius: 8px;
-            font-size: 0.88rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: var(--transition-fast);
-          }
-          .onb-confirm-btn:hover:not(:disabled) { background: #000; color: #fff; }
-          .onb-confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        `}</style>
-      </div>
-    );
-  }
 
   return (
     <div className="accounts-view animate-fade-in">
@@ -516,11 +231,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         }
 
         .accounts-title {
-          font-family: 'Outfit', sans-serif;
+          font-family: var(--font-display);
           font-size: 1.6rem;
           font-weight: 800;
-          font-style: italic;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.02em;
           color: var(--text-main);
         }
 

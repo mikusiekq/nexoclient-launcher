@@ -15,10 +15,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loginOffline: (username: string) => ipcRenderer.invoke('login-offline', username),
   loginMicrosoft: () => ipcRenderer.invoke('login-microsoft'),
   launchGame: (version: string) => ipcRenderer.invoke('launch-game', version),
-  browseMcFolder: () => ipcRenderer.invoke('browse-mc-folder'),
-  importMinecraftSettings: (mcPath: string) => ipcRenderer.invoke('import-minecraft-settings', mcPath),
-  uploadMojangSkin: (token: string, base64DataUrl: string, modelType: 'default' | 'slim') =>
-    ipcRenderer.invoke('upload-mojang-skin', token, base64DataUrl, modelType),
+  
+  minimizeWindow: () => ipcRenderer.send('window-minimize'),
+  maximizeWindow: () => ipcRenderer.send('window-maximize'),
+  closeWindow: () => ipcRenderer.send('window-close'),
   
   getInstalledMods: (profileId: string) => ipcRenderer.invoke('get-installed-mods', profileId),
   installProfileMod: (profileId: string, projectId: string, title: string, versionId: string, downloadUrl: string, fileName: string, iconUrl?: string) =>

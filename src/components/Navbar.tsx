@@ -1,27 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Home, Settings as SettingsIcon, Users, User, LogOut, Layers, Smile, Globe, Check } from 'lucide-react';
-import logoUrl from '../assets/logo-nexoclient.png';
+import { ChevronDown, Users, User, LogOut, Globe, Check } from 'lucide-react';
+import logoUrl from '../assets/logo.png';
 import { useLanguage } from '../context/LanguageContext';
 
 interface NavbarProps {
   config: LauncherConfig | null;
-  activeTab: 'home' | 'accounts' | 'settings' | 'profiles' | 'skins';
-  setActiveTab: (tab: 'home' | 'accounts' | 'settings' | 'profiles' | 'skins') => void;
+  setActiveTab: (tab: 'home' | 'accounts' | 'settings' | 'profiles' | 'mods') => void;
   openLoginModal: () => void;
   onLogout: () => void;
   onSwitchAccount: (account: AccountInfo) => void;
-  hasProfiles?: boolean;
-  hasAccount?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   config,
-  activeTab,
   setActiveTab,
   onLogout,
   onSwitchAccount,
-  hasProfiles = true,
-  hasAccount = true,
 }) => {
   const { lang, setLang, t } = useLanguage();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -42,110 +36,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const homeRef = useRef<HTMLButtonElement | null>(null);
-  const profilesRef = useRef<HTMLButtonElement | null>(null);
-  const skinsRef = useRef<HTMLButtonElement | null>(null);
-  const accountsRef = useRef<HTMLButtonElement | null>(null);
-  const settingsRef = useRef<HTMLButtonElement | null>(null);
-
-  const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({
-    left: 0,
-    width: 0,
-    opacity: 0,
-  });
-
-  useEffect(() => {
-    const updateIndicator = () => {
-      const activeEl = (() => {
-        switch (activeTab) {
-          case 'home': return homeRef.current;
-          case 'profiles': return profilesRef.current;
-          case 'skins': return skinsRef.current;
-          case 'accounts': return accountsRef.current;
-          case 'settings': return settingsRef.current;
-          default: return null;
-        }
-      })();
-
-      if (activeEl) {
-        setIndicatorStyle({
-          left: activeEl.offsetLeft,
-          width: activeEl.offsetWidth,
-          opacity: 1,
-        });
-      } else {
-        setIndicatorStyle(prev => ({ ...prev, opacity: 0 }));
-      }
-    };
-
-    // Use a small timeout so the DOM repaints after text change before measuring
-    const timeoutId = setTimeout(updateIndicator, 20);
-    window.addEventListener('resize', updateIndicator);
-
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('resize', updateIndicator);
-    };
-  }, [activeTab, hasProfiles, hasAccount, lang]);
-
   return (
     <nav className="navbar glass-panel">
       <div className="nav-brand">
         <img src={logoUrl} alt="NEXOCLIENT" className="brand-logo" />
       </div>
 
-      <div className="nav-tabs">
-        <button
-          ref={homeRef}
-          className={`nav-tab-btn ${activeTab === 'home' ? 'active' : ''} ${(!hasProfiles || !hasAccount) ? 'tab-locked' : ''}`}
-          onClick={() => setActiveTab('home')}
-          disabled={!hasProfiles || !hasAccount}
-          title={!hasAccount ? t('nav.tooltip_add_account') : !hasProfiles ? t('nav.tooltip_create_profile') : undefined}
-        >
-          <Home size={18} />
-          <span>{t('nav.home')}</span>
-        </button>
-        <button
-          ref={profilesRef}
-          className={`nav-tab-btn ${activeTab === 'profiles' ? 'active' : ''} ${!hasAccount ? 'tab-locked' : ''}`}
-          onClick={() => setActiveTab('profiles')}
-          disabled={!hasAccount}
-          title={!hasAccount ? t('nav.tooltip_add_account') : undefined}
-        >
-          <Layers size={18} />
-          <span>{t('nav.profiles')}</span>
-        </button>
-        <button
-          ref={skinsRef}
-          className={`nav-tab-btn ${activeTab === 'skins' ? 'active' : ''} ${(!hasProfiles || !hasAccount) ? 'tab-locked' : ''}`}
-          onClick={() => setActiveTab('skins')}
-          disabled={!hasProfiles || !hasAccount}
-          title={!hasAccount ? t('nav.tooltip_add_account') : !hasProfiles ? t('nav.tooltip_create_profile') : undefined}
-        >
-          <Smile size={18} />
-          <span>{t('nav.skins')}</span>
-        </button>
-        <button
-          ref={accountsRef}
-          className={`nav-tab-btn ${activeTab === 'accounts' ? 'active' : ''}`}
-          onClick={() => setActiveTab('accounts')}
-        >
-          <Users size={18} />
-          <span>{t('nav.accounts')}</span>
-        </button>
-        <button
-          ref={settingsRef}
-          className={`nav-tab-btn ${activeTab === 'settings' ? 'active' : ''} ${(!hasProfiles || !hasAccount) ? 'tab-locked' : ''}`}
-          onClick={() => setActiveTab('settings')}
-          disabled={!hasProfiles || !hasAccount}
-          title={!hasAccount ? t('nav.tooltip_add_account') : !hasProfiles ? t('nav.tooltip_create_profile') : undefined}
-        >
-          <SettingsIcon size={18} />
-          <span>{t('nav.settings')}</span>
-        </button>
 
-        <div className="nav-tab-indicator" style={indicatorStyle} />
-      </div>
 
       <div className="nav-user-area">
         {/* Discord Logo Link */}
@@ -278,6 +175,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             </>
           )}
         </div>
+
+        {/* Window controls */}
+        <div className="window-controls">
+          <button className="win-btn win-minimize" onClick={() => window.electronAPI.minimizeWindow()} title="Minimalizuj">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="1" y="5.5" width="10" height="1.6" rx="0.5" fill="currentColor"/></svg>
+          </button>
+          <button className="win-btn win-maximize" onClick={() => window.electronAPI.maximizeWindow()} title="Maksymalizuj">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.6" rx="0.5"/></svg>
+          </button>
+          <button className="win-btn win-close" onClick={() => window.electronAPI.closeWindow()} title="Zamknij">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 2.5 L9.5 9.5 M2.5 9.5 L9.5 2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+          </button>
+        </div>
       </div>
       <style>{`
         .navbar {
@@ -285,76 +195,62 @@ export const Navbar: React.FC<NavbarProps> = ({
           align-items: center;
           justify-content: space-between;
           padding: 12px 24px;
-          margin-bottom: 16px;
           height: 64px;
-          border-radius: 12px !important;
-        }
-
-        .nav-brand {
-          display: flex;
-          align-items: center;
-        }
-
-        .brand-logo {
-          width: 150px;
-          height: 75px;
-          object-fit: contain;
-        }
-
-        .nav-tabs {
-          display: flex;
-          gap: 6px;
+          border: none !important;
+          border-radius: 0 !important;
           position: relative;
-          padding-bottom: 4px;
+          -webkit-app-region: drag;
         }
 
-        .nav-tab-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: transparent;
-          border: 1px solid transparent;
-          color: var(--text-muted);
-          padding: 8px 16px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-weight: 600;
-          font-size: 0.85rem;
-          transition: var(--transition-smooth);
-        }
-
-        .nav-tab-btn:hover:not(:disabled) {
-          color: var(--text-main);
-          background: rgba(255, 255, 255, 0.04);
-        }
-
-        .nav-tab-btn:disabled, .nav-tab-btn.tab-locked {
-          opacity: 0.3;
-          cursor: not-allowed;
-        }
-
-        .nav-tab-btn.active {
-          color: var(--text-main);
-          background: transparent;
-          border-color: transparent;
-        }
-
-        .nav-tab-indicator {
+        .navbar::after {
+          content: '';
           position: absolute;
           bottom: 0;
-          height: 2px;
-          background: #ffffff;
-          border-radius: 2px 2px 0 0;
-          box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
-          transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1), width 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
-          pointer-events: none;
+          left: 83px;
+          right: 0;
+          height: 1px;
+          background: var(--border-color);
+          -webkit-app-region: no-drag;
         }
+
+        .nav-brand,
+        .nav-discord-link,
+        .lang-dd-wrapper,
+        .user-profile-wrapper,
+        .window-controls {
+          -webkit-app-region: no-drag;
+        }
+
+        /* Same width as the sidebar (72px), centred above its icons and nudged down */
+        .nav-brand {
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 72px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transform: translateY(8px);
+        }
+
+        /* logo.png has wide transparent margins, so the image is larger than the visible mark */
+        .brand-logo {
+          width: 60px;
+          height: 60px;
+          object-fit: contain;
+          pointer-events: none;
+          user-select: none;
+        }
+
+
 
         .nav-user-area {
           position: relative;
           display: flex;
           align-items: center;
           gap: 10px;
+          margin-left: auto;
         }
 
         .nav-discord-link {
@@ -676,6 +572,38 @@ export const Navbar: React.FC<NavbarProps> = ({
         .logout-btn:hover {
           background: rgba(239, 68, 68, 0.08);
           color: #ef4444;
+        }
+
+        /* ── Window controls ── */
+        .window-controls {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          margin-left: 12px;
+        }
+
+        .win-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          background: transparent;
+          border: none;
+          border-radius: 4px;
+          color: var(--text-muted);
+          cursor: pointer;
+          transition: var(--transition-fast);
+        }
+
+        .win-btn:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: var(--text-main);
+        }
+
+        .win-btn.win-close:hover {
+          background: #ef4444;
+          color: #ffffff;
         }
       `}</style>
     </nav>

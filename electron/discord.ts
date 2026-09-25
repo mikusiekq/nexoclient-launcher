@@ -20,7 +20,7 @@ function publish() {
   const game = presence.mode === 'game' ? presence : null;
   client
     .setActivity({
-      details: game ? (game.place ? `In ${game.place}` : 'W menu głównym') : 'W launcherze',
+      details: game ? `In ${game.place ?? 'main menu'}` : 'W launcherze',
       state: game ? game.version : undefined,
       startTimestamp: game ? game.startedAt : launcherStartedAt,
       largeImageKey: LOGO_ASSET,

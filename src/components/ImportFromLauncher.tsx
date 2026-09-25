@@ -21,6 +21,7 @@ export const ImportFromLauncher: React.FC<ImportFromLauncherProps> = ({ versions
     worlds: true,
     servers: true,
     options: true,
+    modConfigs: true,
     resourcePacks: true,
   });
   const [importing, setImporting] = useState(false);
@@ -39,6 +40,7 @@ export const ImportFromLauncher: React.FC<ImportFromLauncherProps> = ({ versions
       worlds: p.worlds.length > 0,
       servers: p.hasServers,
       options: p.hasOptions,
+      modConfigs: p.modConfigs > 0,
       resourcePacks: p.resourcePacks > 0,
     });
     setError(null);
@@ -70,7 +72,13 @@ export const ImportFromLauncher: React.FC<ImportFromLauncherProps> = ({ versions
           available: profile.worlds.length > 0,
         },
         { key: 'servers', label: 'Lista serwerów', detail: 'zastąpi obecną (kopia .bak)', available: profile.hasServers },
-        { key: 'options', label: 'Ustawienia gry', detail: 'options.txt — zastąpi obecne (kopia .bak)', available: profile.hasOptions },
+        { key: 'options', label: 'Ustawienia Minecrafta', detail: 'grafika, sterowanie, dźwięk — zastąpi obecne (kopia .bak)', available: profile.hasOptions },
+        {
+          key: 'modConfigs',
+          label: 'Ustawienia modów',
+          detail: `${profile.modConfigs} plików (config) — nadpisane trafią do config-backup`,
+          available: profile.modConfigs > 0,
+        },
         { key: 'resourcePacks', label: 'Paczki zasobów', detail: `${profile.resourcePacks}`, available: profile.resourcePacks > 0 },
       ]
     : [];

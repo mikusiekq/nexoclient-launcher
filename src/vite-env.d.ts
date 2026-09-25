@@ -48,6 +48,7 @@ interface ImportableProfile {
   mods: number;
   worlds: string[];
   resourcePacks: number;
+  modConfigs: number;
   hasOptions: boolean;
   hasServers: boolean;
 }
@@ -66,6 +67,7 @@ interface ImportOptions {
   worlds: boolean;
   servers: boolean;
   options: boolean;
+  modConfigs: boolean;
   resourcePacks: boolean;
 }
 

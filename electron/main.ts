@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron';
+import path from 'path';
 import { ensureGameDirs, getConfig, loadConfig } from './config';
 import { startDiscordRpc } from './discord';
 import { registerIpcHandlers } from './ipc';
@@ -6,6 +7,10 @@ import { migrateLegacyGameData } from './migration';
 import { stampLegacyProfileDirs, syncProfileFolderNames } from './profiles';
 import { startAutoUpdate } from './updater';
 import { createWindow, focusMainWindow } from './window';
+
+// Dev builds get their own Electron data folder (and with it their own single-instance lock),
+// so `npm run dev` can run next to an installed launcher
+if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'NEXOCLIENT-dev'));
 
 // Only one launcher at a time; launching it again focuses the open window
 if (!app.requestSingleInstanceLock()) {

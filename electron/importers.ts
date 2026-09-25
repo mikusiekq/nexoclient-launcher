@@ -26,6 +26,7 @@ export interface ImportableProfile {
   mods: number;
   worlds: string[];
   resourcePacks: number;
+  modConfigs: number; // files in config\
   hasOptions: boolean;
   hasServers: boolean;
 }
@@ -44,6 +45,7 @@ export interface ImportOptions {
   worlds: boolean;
   servers: boolean;
   options: boolean;
+  modConfigs: boolean;
   resourcePacks: boolean;
 }
 
@@ -193,6 +195,24 @@ function sourceProfiles(id: ImportSourceId): SourceProfile[] {
 
 const optionsPath = (p: SourceProfile) => p.optionsFile ?? path.join(p.gameDir, 'options.txt');
 
+// Game settings: options.txt plus OptiFine / shader settings kept next to it
+const EXTRA_SETTINGS_FILES = ['optionsof.txt', 'optionsshaders.txt'];
+
+// Mod settings folder; our own mod's settings are never overwritten by an import
+const configDir = (p: SourceProfile) => path.join(p.gameDir, 'config');
+const SKIPPED_CONFIGS = new Set(['nexoclient']);
+
+function countFiles(dir: string, skip = new Set<string>()): number {
+  try {
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter(e => !skip.has(e.name))
+      .reduce((n, e) => n + (e.isDirectory() ? countFiles(path.join(dir, e.name)) : 1), 0);
+  } catch {
+    return 0;
+  }
+}
+
 function describe(profile: SourceProfile): ImportableProfile {
   return {
     key: profile.key,
@@ -203,6 +223,7 @@ function describe(profile: SourceProfile): ImportableProfile {
     resourcePacks: fs.existsSync(path.join(profile.gameDir, 'resourcepacks'))
       ? fs.readdirSync(path.join(profile.gameDir, 'resourcepacks')).length
       : 0,
+    modConfigs: countFiles(configDir(profile), SKIPPED_CONFIGS),
     hasOptions: fs.existsSync(optionsPath(profile)),
     hasServers: fs.existsSync(path.join(profile.gameDir, 'servers.dat')),
   };
@@ -224,6 +245,25 @@ function freeName(dir: string, name: string): string {
   let candidate = name;
   for (let i = 2; fs.existsSync(path.join(dir, candidate)); i++) candidate = `${name} (${i})`;
   return candidate;
+}
+
+// Copies src into dest; files that already exist in dest are first copied into backupDir (same relative path)
+function mergeWithBackup(src: string, dest: string, backupDir: string, skip = new Set<string>()) {
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (skip.has(entry.name)) continue;
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      mergeWithBackup(from, to, path.join(backupDir, entry.name));
+      continue;
+    }
+    if (fs.existsSync(to)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+      fs.copyFileSync(to, path.join(backupDir, entry.name));
+    }
+    fs.mkdirSync(dest, { recursive: true });
+    fs.copyFileSync(from, to);
+  }
 }
 
 // Replaces a shared file, keeping the previous one as <file>.bak
@@ -299,8 +339,20 @@ export function importProfile(sourceId: ImportSourceId, key: string, options: Im
 
   const servers = path.join(source.gameDir, 'servers.dat');
   if (options.servers && fs.existsSync(servers)) replaceWithBackup(servers, path.join(shared, 'servers.dat'));
-  const gameOptions = optionsPath(source);
-  if (options.options && fs.existsSync(gameOptions)) replaceWithBackup(gameOptions, path.join(shared, 'options.txt'));
+  if (options.options) {
+    const gameOptions = optionsPath(source);
+    if (fs.existsSync(gameOptions)) replaceWithBackup(gameOptions, path.join(shared, 'options.txt'));
+    for (const file of EXTRA_SETTINGS_FILES) {
+      const src = path.join(path.dirname(gameOptions), file);
+      if (fs.existsSync(src)) replaceWithBackup(src, path.join(shared, file));
+    }
+  }
+
+  if (options.modConfigs && fs.existsSync(configDir(source))) {
+    // Overwritten mod settings are kept in config-backup\<date>\
+    const backupDir = path.join(shared, 'config-backup', new Date().toISOString().replace(/[:.]/g, '-'));
+    mergeWithBackup(configDir(source), path.join(shared, 'config'), backupDir, SKIPPED_CONFIGS);
+  }
 
   return getConfig();
 }

@@ -1,5 +1,6 @@
 # Every push to main publishes a new launcher release: builds the Windows installer and creates the
-# GitHub Release v1.0.<run number>. Installed launchers see it on their next start and update themselves.
+# GitHub Release v<major>.<minor>.<run number> (major.minor from package.json "version").
+# Installed launchers see it on their next start and update themselves.
 # Add [skip ci] to a commit message to push without releasing. "Run workflow" in the Actions tab rebuilds manually.
 name: Release
 
@@ -29,12 +30,26 @@ jobs:
 
       - run: npm ci
 
-      # Version grows with every run, so each release counts as an update
+      # <major>.<minor> from package.json + the run number, so every release is higher than the previous one
       - name: Set version
+        id: version
         shell: bash
-        run: npm version "1.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+        run: |
+          BASE=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
+          VERSION="$BASE.${{ github.run_number }}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish installer
+      # electron-builder uploads the installer, blockmap and latest.yml into a draft release
+      # (parallel uploads to a draft can't race on creating the tag)
+      - name: Build installer
         run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Publishing creates the tag on this commit; launchers only see published releases
+      - name: Publish release
+        shell: bash
+        run: gh release edit "${{ steps.version.outputs.tag }}" --draft=false --latest --target "$GITHUB_SHA"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

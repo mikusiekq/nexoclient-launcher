@@ -71,7 +71,7 @@
         "provider": "github",
         "owner": "mikusiekq",
         "repo": "nexoclient-launcher",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ]
   }

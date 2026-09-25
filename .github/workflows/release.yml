@@ -1,0 +1,43 @@
+# Builds the Windows installer and publishes it as a GitHub Release (with its tag v<version>).
+# Start it on GitHub: Actions -> Release -> Run workflow -> enter the version, e.g. 1.0.1
+# or by pushing a tag: git tag v1.0.1 && git push origin v1.0.1
+# The launcher version comes from that input/tag, so package.json doesn't need to be bumped by hand.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Wersja launchera (np. 1.0.1) — musi być wyższa niż poprzednia'
+        required: true
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Set version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION:-${GITHUB_REF_NAME}}"
+          npm version "${VERSION#v}" --no-git-tag-version --allow-same-version
+
+      - name: Build and publish installer
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

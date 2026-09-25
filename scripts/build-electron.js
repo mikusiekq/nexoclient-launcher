@@ -11,7 +11,7 @@ const outDir = path.join(root, 'dist-electron');
 const watch = process.argv.includes('--watch');
 
 const entries = [
-  { entry: 'electron/main.ts', out: 'main.js', external: ['electron', 'minecraft-launcher-core', 'msmc', 'discord-rpc'] },
+  { entry: 'electron/main.ts', out: 'main.js', external: ['electron', 'electron-updater', 'minecraft-launcher-core', 'msmc', 'discord-rpc'] },
   { entry: 'electron/preload.ts', out: 'preload.js', external: ['electron'] },
 ];
 
@@ -25,10 +25,12 @@ const buildOptions = ({ entry, out, external }) => ({
   sourcemap: true,
 });
 
-// The bundled NexoClient mod is shipped next to main.js (fallback when GitHub is unreachable)
+// Shipped next to main.js: the window icon and the bundled NexoClient mod (fallback when GitHub is unreachable)
 function copyResources() {
   fs.mkdirSync(outDir, { recursive: true });
-  fs.copyFileSync(path.join(root, 'resources', 'nexoclient.jar'), path.join(outDir, 'nexoclient.jar'));
+  for (const file of ['icon.png', 'nexoclient.jar']) {
+    fs.copyFileSync(path.join(root, 'resources', file), path.join(outDir, file));
+  }
 }
 
 let electronProcess = null;

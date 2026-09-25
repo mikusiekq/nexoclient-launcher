@@ -36,6 +36,11 @@ interface LauncherConfig {
   setupCompleted?: boolean;
 }
 
+type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string };
+
 interface Window {
   electronAPI: {
     getConfig(): Promise<LauncherConfig>;
@@ -62,6 +67,12 @@ interface Window {
       iconUrl?: string
     ): Promise<boolean>;
     uninstallProfileMod(profileId: string, projectId: string): Promise<boolean>;
+
+    // Launcher updates
+    getAppVersion(): Promise<string>;
+    getUpdateStatus(): Promise<UpdateStatus>;
+    installUpdate(): void;
+    onUpdateStatus(callback: (status: UpdateStatus) => void): () => void;
 
     minimizeWindow(): void;
     maximizeWindow(): void;

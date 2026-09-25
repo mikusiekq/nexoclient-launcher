@@ -4,6 +4,7 @@ import { startDiscordRpc } from './discord';
 import { registerIpcHandlers } from './ipc';
 import { migrateLegacyGameData } from './migration';
 import { stampLegacyProfileDirs, syncProfileFolderNames } from './profiles';
+import { startAutoUpdate } from './updater';
 import { createWindow, focusMainWindow } from './window';
 
 // Only one launcher at a time; launching it again focuses the open window
@@ -22,6 +23,7 @@ if (!app.requestSingleInstanceLock()) {
 
     registerIpcHandlers();
     createWindow();
+    startAutoUpdate();
     if (config.discordRpc) startDiscordRpc();
 
     app.on('activate', () => {

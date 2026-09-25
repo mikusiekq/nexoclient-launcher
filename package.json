@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "node scripts/build-electron.js --watch",
     "build": "vite build && node scripts/build-electron.js",
+    "dist": "npm run build && electron-builder --win --publish never",
+    "release": "npm run build && electron-builder --win --publish always",
     "preview": "vite preview"
   },
   "dependencies": {
     "discord-rpc": "^4.0.1",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.359.0",
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.5",
@@ -24,8 +27,52 @@
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",
     "electron": "^29.1.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.20.1",
     "typescript": "^5.3.3",
     "vite": "^5.1.4"
+  },
+  "productName": "NEXOCLIENT",
+  "author": "NexoClient",
+  "repository": "https://github.com/mikusiekq/nexoclient-launcher",
+  "build": {
+    "appId": "top.nexoclient.launcher",
+    "productName": "NEXOCLIENT",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NEXOCLIENT",
+      "artifactName": "NexoClient-Setup.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mikusiekq",
+        "repo": "nexoclient-launcher",
+        "releaseType": "release"
+      }
+    ]
   }
 }

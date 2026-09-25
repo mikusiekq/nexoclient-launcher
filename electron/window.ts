@@ -17,7 +17,7 @@ export function setLaunchStatus(status: string) {
 }
 
 export function createWindow() {
-  const iconPath = path.join(__dirname, '../src/assets/logo.png');
+  const iconPath = path.join(__dirname, 'icon.png'); // copied from resources/ by scripts/build-electron.js
   mainWindow = new BrowserWindow({
     width: 1300,
     height: 760,

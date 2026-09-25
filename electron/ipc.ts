@@ -1,4 +1,4 @@
-import { dialog, ipcMain, shell } from 'electron';
+import { app, dialog, ipcMain, shell } from 'electron';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -9,6 +9,7 @@ import { launchGame } from './game';
 import { detectJavaPaths } from './java';
 import { getInstalledMods, installMod, uninstallMod } from './mods';
 import { getProfileDir, syncProfileFolderNames } from './profiles';
+import { getUpdateStatus, installUpdateNow } from './updater';
 import { fetchGameVersions } from './versions';
 import { getMainWindow } from './window';
 
@@ -86,6 +87,11 @@ export function registerIpcHandlers() {
     fs.mkdirSync(target, { recursive: true });
     await shell.openPath(target);
   });
+
+  // Launcher updates
+  ipcMain.handle('get-app-version', () => app.getVersion());
+  ipcMain.handle('get-update-status', () => getUpdateStatus());
+  ipcMain.on('install-update', () => installUpdateNow());
 
   // Window controls (frameless window)
   ipcMain.on('window-minimize', () => getMainWindow()?.minimize());

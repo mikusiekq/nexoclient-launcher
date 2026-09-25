@@ -16,6 +16,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loginMicrosoft: () => ipcRenderer.invoke('login-microsoft'),
   launchGame: (version: string) => ipcRenderer.invoke('launch-game', version),
   
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
+  installUpdate: () => ipcRenderer.send('install-update'),
+  onUpdateStatus: (callback: (status: any) => void) => {
+    const subscription = (_event: any, status: any) => callback(status);
+    ipcRenderer.on('update-status', subscription);
+    return () => ipcRenderer.removeListener('update-status', subscription);
+  },
+
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),

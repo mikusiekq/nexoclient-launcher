@@ -9,6 +9,7 @@ import { ProfileDetailView } from './views/ProfileDetailView';
 import { ModsView } from './views/ModsView';
 import { ConsoleView } from './views/ConsoleView';
 import { FirstRunSetup } from './components/FirstRunSetup';
+import { UpdateNotice } from './components/UpdateNotice';
 import { LoginModal } from './components/LoginModal';
 import logoIcon from './assets/logo.png';
 
@@ -370,6 +371,8 @@ export const App: React.FC = () => {
           onSaveConfig={handleSaveConfig}
         />
       )}
+
+      <UpdateNotice />
 
       {/* Login Modal */}
       <LoginModal

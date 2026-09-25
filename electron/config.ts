@@ -44,11 +44,12 @@ export const getDefaultGamePath = () => path.join(app.getPath('appData'), '.nexo
 export const getLauncherDir = () => path.join(getDefaultGamePath(), 'launcher');
 const getConfigPath = () => path.join(getLauncherDir(), 'launcher-config.json');
 
-// Older launcher versions kept everything in Electron's userData folder
-const getLegacyConfigPath = () => path.join(app.getPath('userData'), 'launcher-config.json');
+// Older launcher versions kept everything in Electron's userData folder, which was %APPDATA%\nexoclient
+const getLegacyDataDir = () => path.join(app.getPath('appData'), 'nexoclient');
+const getLegacyConfigPath = () => path.join(getLegacyDataDir(), 'launcher-config.json');
 export const getLegacyGamePaths = () => [
-  path.join(app.getPath('userData'), 'game'),
-  path.join(app.getPath('userData'), '.nexoclient'),
+  path.join(getLegacyDataDir(), 'game'),
+  path.join(getLegacyDataDir(), '.nexoclient'),
 ];
 
 const defaultConfig = (): LauncherConfig => ({
